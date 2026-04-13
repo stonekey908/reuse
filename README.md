@@ -2,116 +2,332 @@
 
 A personal codebase registry that lets AI assistants reference patterns across your projects.
 
-Register your projects with descriptions, tags, and notable patterns. Any MCP-compatible AI (Claude Code, Claude Desktop, Cursor) can then search your registry and read code from referenced projects to adapt patterns for your current work.
+Register your projects with descriptions, tags, and notable patterns. Any MCP-compatible AI assistant can then search your registry, read code from referenced projects, and adapt patterns for your current work.
 
-The AI reads your code to understand the *approach*, then uses its own judgment in the current context. Sometimes it replicates the pattern, sometimes it adapts it, sometimes it says "I see how you did it there, but here's a better fit for this project."
+The AI reads your code to understand the *approach*, then uses its own judgment in the current context. Sometimes it replicates the pattern, sometimes it adapts it, sometimes it says "I see how you did it there, but here's a better fit for this project." It never blindly copies.
 
-## Quick Start
+## Setup with AI (Recommended)
+
+The easiest way to set up Reuse is to point your AI assistant at this repo and let it help you.
+
+**Claude Code:**
+```
+Clone https://github.com/stonekey908/reuse and set it up for me.
+Install dependencies, build it, link it globally, and add the MCP
+server to my global Claude config.
+```
+
+**Cursor / Windsurf / any MCP-compatible editor:**
+```
+Clone https://github.com/stonekey908/reuse, install and build it,
+then configure it as an MCP server in my editor settings.
+```
+
+The AI will handle cloning, building, and wiring up the MCP config for your specific environment. Once set up, you can immediately start registering projects and asking the AI to reference them.
+
+## Manual Setup
+
+### Prerequisites
+
+- **Node.js** 18+ (`node --version` to check)
+- **npm** (`npm --version` to check)
+- **Git** (`git --version` to check)
+
+### 1. Clone and build
 
 ```bash
-# Install
 git clone https://github.com/stonekey908/reuse.git
 cd reuse
 npm install
-npm run build
-npm link
-
-# Register a project
-reuse add my-app ~/projects/my-app -d "My awesome app" -t "react,typescript"
-
-# Add a notable pattern
-reuse pattern my-app auth "JWT auth with refresh tokens and role-based access"
-
-# Search
-reuse search auth
-
-# Web UI
-reuse serve
-# → http://localhost:3210
+npm run build        # Builds TypeScript server + Vite frontend
 ```
 
-## MCP Setup
+### 2. Link the CLI globally
 
-Add to your global Claude config (`~/.claude.json`):
+```bash
+npm link
+```
+
+This makes the `reuse` command available in your terminal from any directory.
+
+Verify it works:
+```bash
+reuse --help
+```
+
+You should see the list of commands (list, search, add, remove, tag, pattern, serve).
+
+### 3. Configure the MCP server
+
+The MCP server is what lets AI assistants talk to Reuse. Configuration depends on your client.
+
+#### Claude Code (CLI / Desktop App)
+
+Add to `~/.claude.json` under the top-level `mcpServers` key:
 
 ```json
 {
   "mcpServers": {
     "reuse": {
       "command": "node",
-      "args": ["/path/to/reuse/dist/mcp/stdio.js"]
+      "args": ["/FULL/PATH/TO/reuse/dist/mcp/stdio.js"]
     }
   }
 }
 ```
 
-Then in any Claude session:
+Replace `/FULL/PATH/TO/reuse` with the actual path where you cloned the repo (e.g., `/Users/yourname/reuse`).
 
-> "Search my projects for file upload patterns"
+Restart Claude Code for the MCP server to load.
 
-Claude will use the Reuse MCP to find and reference your code, then adapt the approach for your current project.
+#### Claude Desktop
 
-## MCP Tools
+Add to your Claude Desktop config (Settings > Developer > Edit Config):
 
-| Tool | Description |
-|------|-------------|
-| `list_projects` | Browse all registered projects |
-| `search_projects` | Search by keyword across names, descriptions, tags, patterns |
-| `get_project_details` | Full details for a specific project |
-| `search_project_code` | Grep within a project's codebase |
-| `read_project_file` | Read a file from a registered project |
-| `register_project` | Add a project to the registry |
-| `update_project` | Update project metadata |
-| `remove_project` | Unregister a project |
-| `find_local_project` | Search filesystem for a project folder |
+```json
+{
+  "mcpServers": {
+    "reuse": {
+      "command": "node",
+      "args": ["/FULL/PATH/TO/reuse/dist/mcp/stdio.js"]
+    }
+  }
+}
+```
 
-## CLI Commands
+Restart Claude Desktop.
+
+#### Cursor
+
+Add to `.cursor/mcp.json` in your home directory or project:
+
+```json
+{
+  "mcpServers": {
+    "reuse": {
+      "command": "node",
+      "args": ["/FULL/PATH/TO/reuse/dist/mcp/stdio.js"]
+    }
+  }
+}
+```
+
+#### Windsurf
+
+Add to your Windsurf MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "reuse": {
+      "command": "node",
+      "args": ["/FULL/PATH/TO/reuse/dist/mcp/stdio.js"]
+    }
+  }
+}
+```
+
+#### Any other MCP-compatible client
+
+Reuse uses **stdio transport** — the standard MCP protocol over stdin/stdout. Any client that supports MCP stdio servers can connect. The command is:
+
+```
+node /FULL/PATH/TO/reuse/dist/mcp/stdio.js
+```
+
+No environment variables or API keys required.
+
+### 4. Verify it works
+
+In your AI assistant, try:
+
+> "List my reuse projects"
+
+If the MCP is connected, the AI will call `list_projects` and show your registry (empty at first).
+
+## Registering Projects
+
+Three ways to add projects — use whichever fits your workflow.
+
+### Via AI (natural language)
+
+Once the MCP is connected, just tell the AI:
+
+> "Register my-app from ~/projects/my-app. It's a React dashboard with real-time WebSocket data and JWT auth."
+
+The AI will call `register_project` with the path, description, and tags it infers. It can also auto-detect the git remote.
+
+> "Find wineanalyzer in my Documents and register it"
+
+The AI will use `find_local_project` to locate the directory, then register it.
+
+### Via CLI
+
+```bash
+# Basic registration
+reuse add my-app ~/projects/my-app
+
+# With metadata
+reuse add my-app ~/projects/my-app \
+  -d "React dashboard with real-time data" \
+  -t "react,typescript,websockets,auth"
+
+# Add patterns after registration
+reuse pattern my-app auth "JWT with refresh tokens and role-based access"
+reuse pattern my-app real-time "WebSocket-based live data feeds with reconnection"
+
+# Add tags
+reuse tag my-app nextjs supabase
+
+# Search
+reuse search auth
+reuse search websocket
+```
+
+### Via Web UI
+
+```bash
+reuse serve
+# Open http://localhost:3210
+```
+
+Click "+ Add Project" to register, or click "Edit" on any project to update all fields including path, git URL, patterns, and links. Changes are instant — the same `~/.reuse/registry.json` is used by all three interfaces.
+
+## Using Reuse
+
+Once projects are registered, you use Reuse by talking to your AI assistant naturally:
+
+| What you say | What the AI does |
+|---|---|
+| "I want file upload like my photos app" | Searches projects for "upload", reads the relevant code, adapts the pattern |
+| "Show me how schoolsync handles encryption" | Gets project details, searches for encryption code, reads the files |
+| "Build auth like gts-trade but for a mobile app" | Reads the auth pattern from gts-trade, adapts it for React Native |
+| "What projects use Supabase?" | Searches tags for "supabase", lists matching projects |
+| "Register wine-analyzer from my Documents" | Finds the folder, detects git remote, registers it |
+
+The AI maintains full autonomy. It reads your code to understand the approach, then decides how to apply it. It might:
+- Replicate the pattern closely if the stack matches
+- Adapt it significantly for a different framework
+- Say "I see the approach but there's a better way for this use case"
+
+## MCP Tools Reference
+
+### Read tools (for referencing code)
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `list_projects` | — | Browse all registered projects with descriptions, tags, and pattern names |
+| `search_projects` | `query` | Search by keyword across names, descriptions, tags, and patterns |
+| `get_project_details` | `name` | Full details for a project including file structure overview |
+| `search_project_code` | `name`, `pattern`, `fileGlob?` | Search source code within a project (case-insensitive, regex supported) |
+| `read_project_file` | `name`, `filePath` | Read a specific file (path relative to project root, max 100KB) |
+
+### Write tools (for managing the registry)
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `register_project` | `name`, `projectPath`, `description?`, `tags?`, `patterns?`, `git?`, `links?` | Register a new project (auto-detects git remote) |
+| `update_project` | `name`, `description?`, `tags?`, `patterns?`, `git?`, `links?` | Update any metadata field |
+| `remove_project` | `name` | Unregister a project (does NOT delete files) |
+| `find_local_project` | `name`, `searchIn?` | Search filesystem for a project folder by name |
+
+## CLI Reference
 
 | Command | Description |
 |---------|-------------|
-| `reuse list` | List registered projects |
-| `reuse search <query>` | Search projects |
+| `reuse list` | List all registered projects with metadata |
+| `reuse search <query>` | Search projects by keyword |
 | `reuse add <name> <path>` | Register a project (`-d` description, `-t` tags, `-g` git URL) |
-| `reuse remove <name>` | Unregister a project |
-| `reuse tag <name> <tags...>` | Add tags |
-| `reuse pattern <name> <key> <desc>` | Add a notable pattern |
-| `reuse serve` | Start the web UI (default port 3210) |
+| `reuse remove <name>` | Unregister a project (no files deleted) |
+| `reuse tag <name> <tags...>` | Add tags to a project |
+| `reuse pattern <name> <key> <desc>` | Add or update a named pattern |
+| `reuse serve [-p port]` | Start the web UI (default port 3210) |
 
 ## Web UI
 
-Run `reuse serve` and open `http://localhost:3210` to visually manage your project registry — add, edit, remove projects and see all metadata at a glance.
+Run `reuse serve` and open `http://localhost:3210`.
+
+- View all registered projects at a glance
+- Add new projects with the form
+- Edit any field — path, description, tags, git URL, patterns, links
+- Remove projects
+- All changes write to the same registry file used by the CLI and MCP
 
 ## How It Works
 
 ```
 You register:
-  "schoolsync" → path, description, tags, notable patterns
+  "schoolsync" → path, description, tags, notable patterns, git, links
 
 AI receives prompt:
   "I want file upload like my photos app"
 
 AI calls Reuse MCP tools:
   1. search_projects("file upload") → finds photos-app
-  2. get_project_details("photos-app") → sees the upload pattern
-  3. search_project_code("photos-app", "upload") → finds relevant files
-  4. read_project_file("photos-app", "src/Upload/index.tsx") → reads the code
-  5. Adapts the approach for the current project
+  2. get_project_details("photos-app") → sees the upload pattern description
+  3. search_project_code("photos-app", "upload") → finds relevant source files
+  4. read_project_file("photos-app", "src/Upload/index.tsx") → reads the actual code
+  5. Adapts the approach for the current project's stack and context
 ```
 
-## Registry
+The AI can also use your other tools alongside Reuse. If a project has a Linear link, the AI can check Linear for related tickets. If it has a Notion link, it can pull docs. Reuse is the index — your other tools provide the depth.
 
-Projects are stored in `~/.reuse/registry.json`. Each project has:
+## Registry Format
 
-- **path** — absolute path to the project directory
-- **description** — what the project does
-- **tags** — searchable keywords
-- **patterns** — named patterns with descriptions (e.g., "encryption": "E2E encryption using libsodium")
-- **git** — remote repository URL
-- **links** — external links (Linear, Figma, Notion, etc.)
+Projects are stored in `~/.reuse/registry.json`:
+
+```json
+{
+  "projects": {
+    "schoolsync": {
+      "path": "/Users/you/schoolsync",
+      "description": "School communication app for parents and teachers",
+      "tags": ["react-native", "expo", "firebase", "encryption"],
+      "patterns": {
+        "encryption": "E2E encryption using libsodium for messages and attachments",
+        "file-upload": "Chunked upload with progress tracking, retry, and compression"
+      },
+      "git": "https://github.com/you/schoolsync",
+      "links": {
+        "linear": "https://linear.app/team/project/schoolsync",
+        "figma": "https://figma.com/file/abc123"
+      }
+    }
+  }
+}
+```
+
+You can edit this file directly if you prefer — it's just JSON.
 
 ## Security
 
-- File access is scoped to registered projects only — the MCP server cannot read arbitrary paths
-- Path traversal is blocked (resolved paths must stay within the project directory)
-- Files over 100KB are rejected to prevent context flooding
-- The registry is read/write, but project files are read-only
+- **Scoped access** — the MCP server can only read files from explicitly registered projects, never arbitrary paths
+- **Path traversal blocked** — resolved paths must stay within the project directory
+- **Size limits** — files over 100KB are rejected to prevent context flooding
+- **Read-only project files** — the registry is read/write, but your actual project code is read-only
+- **No network** — Reuse never phones home, calls APIs, or sends data anywhere. It's entirely local.
+- **No credentials** — no API keys, tokens, or accounts needed
+
+## Troubleshooting
+
+**MCP server not connecting:**
+- Check the path in your MCP config points to the actual `dist/mcp/stdio.js` file
+- Make sure you ran `npm run build` (or `npm run build:server`) after cloning
+- Restart your AI client after changing the MCP config
+
+**`reuse` command not found:**
+- Run `npm link` from the reuse directory
+- Or use `node /path/to/reuse/dist/cli/index.js` directly
+
+**Search returning no results:**
+- Reuse searches with a built-in Node.js grep (no external tools required)
+- If ripgrep (`rg`) is installed at `/opt/homebrew/bin/rg` or `/usr/local/bin/rg`, it will use that instead for better performance
+- Check the project path is correct: `reuse list`
+
+**Web UI won't start:**
+- Make sure you built the frontend: `npx vite build` (from the reuse directory)
+- Check nothing else is using port 3210: `reuse serve -p 3211`
+
+## License
+
+MIT
