@@ -1,0 +1,332 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+import { loadRegistry, saveRegistry } from '../shared/registry.js';
+import { searchProjects } from '../shared/search.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { execSync } from 'child_process';
+
+export function createReuseServer(): McpServer {
+  const server = new McpServer({
+    name: 'reuse',
+    version: '0.1.0',
+  });
+
+  // ─── READ TOOLS ───
+
+  server.tool(
+    'list_projects',
+    'List all registered projects in the codebase registry with their descriptions, tags, and patterns',
+    {},
+    async () => {
+      const registry = loadRegistry();
+      const projects = Object.entries(registry.projects).map(([name, project]) => ({
+        name,
+        path: project.path,
+        description: project.description,
+        tags: project.tags,
+        patterns: project.patterns ? Object.keys(project.patterns) : [],
+        git: project.git,
+        links: project.links,
+      }));
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ totalProjects: projects.length, projects }, null, 2),
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    'search_projects',
+    'Search registered projects by keyword — matches against names, descriptions, tags, and pattern names/descriptions',
+    {
+      query: z.string().describe('Search keyword (e.g. "upload", "encryption", "react-native")'),
+    },
+    async ({ query }) => {
+      const registry = loadRegistry();
+      const results = searchProjects(registry, query);
+
+      const formatted = results.map((r) => ({
+        name: r.name,
+        path: r.project.path,
+        description: r.project.description,
+        tags: r.project.tags,
+        patterns: r.project.patterns,
+        matchedOn: r.matchedOn,
+        git: r.project.git,
+        links: r.project.links,
+      }));
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ query, resultCount: formatted.length, results: formatted }, null, 2),
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    'get_project_details',
+    'Get full details for a specific registered project including all patterns, links, and metadata',
+    {
+      name: z.string().describe('Project name as registered (e.g. "schoolsync")'),
+    },
+    async ({ name }) => {
+      const registry = loadRegistry();
+      const project = registry.projects[name];
+
+      if (!project) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `Project "${name}" not found. Use list_projects to see available projects.`,
+          }],
+        };
+      }
+
+      let fileInfo: { exists: boolean; topLevelDirs?: string[] } = { exists: false };
+      if (fs.existsSync(project.path)) {
+        const entries = fs.readdirSync(project.path, { withFileTypes: true });
+        fileInfo = {
+          exists: true,
+          topLevelDirs: entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name),
+        };
+      }
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ name, ...project, fileInfo }, null, 2),
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    'search_project_code',
+    'Search for a pattern in a registered project\'s codebase using ripgrep. Only searches within registered projects.',
+    {
+      project: z.string().describe('Project name as registered'),
+      pattern: z.string().describe('Search pattern (regex supported)'),
+      fileGlob: z.string().optional().describe('Optional file glob filter (e.g. "*.ts", "*.tsx")'),
+    },
+    async ({ project: projectName, pattern, fileGlob }) => {
+      const registry = loadRegistry();
+      const project = registry.projects[projectName];
+
+      if (!project) {
+        return { content: [{ type: 'text' as const, text: `Project "${projectName}" not found.` }] };
+      }
+
+      if (!fs.existsSync(project.path)) {
+        return { content: [{ type: 'text' as const, text: `Project path does not exist: ${project.path}` }] };
+      }
+
+      try {
+        const globArg = fileGlob ? `--glob "${fileGlob}"` : '';
+        const cmd = `rg --no-heading --line-number --max-count 50 ${globArg} "${pattern}" "${project.path}" 2>/dev/null || true`;
+        const output = execSync(cmd, { encoding: 'utf-8', maxBuffer: 1024 * 1024 });
+
+        const relative = output
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => line.replace(project.path + '/', ''))
+          .join('\n');
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: relative || `No matches for "${pattern}" in ${projectName}`,
+          }],
+        };
+      } catch {
+        return { content: [{ type: 'text' as const, text: 'Search failed. Is ripgrep (rg) installed?' }] };
+      }
+    }
+  );
+
+  server.tool(
+    'read_project_file',
+    'Read a specific file from a registered project. Path must be relative to the project root. Only reads from registered projects.',
+    {
+      project: z.string().describe('Project name as registered'),
+      filePath: z.string().describe('File path relative to project root (e.g. "src/components/Upload/index.tsx")'),
+    },
+    async ({ project: projectName, filePath }) => {
+      const registry = loadRegistry();
+      const project = registry.projects[projectName];
+
+      if (!project) {
+        return { content: [{ type: 'text' as const, text: `Project "${projectName}" not found.` }] };
+      }
+
+      const fullPath = path.resolve(project.path, filePath);
+
+      // Security: ensure resolved path is within the project directory
+      if (!fullPath.startsWith(path.resolve(project.path))) {
+        return { content: [{ type: 'text' as const, text: 'Access denied: path escapes project directory.' }] };
+      }
+
+      if (!fs.existsSync(fullPath)) {
+        return { content: [{ type: 'text' as const, text: `File not found: ${filePath}` }] };
+      }
+
+      const stat = fs.statSync(fullPath);
+      if (stat.size > 100 * 1024) {
+        return { content: [{ type: 'text' as const, text: `File too large (${Math.round(stat.size / 1024)}KB). Use search_project_code to find specific sections.` }] };
+      }
+
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `File: ${filePath}\n\n${content}`,
+        }],
+      };
+    }
+  );
+
+  // ─── WRITE TOOLS ───
+
+  server.tool(
+    'register_project',
+    'Register a new project in the codebase registry. Provide the name, path, and optional metadata.',
+    {
+      name: z.string().describe('Short project name (e.g. "schoolsync", "wine-analyzer")'),
+      projectPath: z.string().describe('Absolute path to the project directory'),
+      description: z.string().optional().describe('Human-readable description'),
+      tags: z.array(z.string()).optional().describe('Searchable tags'),
+      patterns: z.record(z.string(), z.string()).optional().describe('Named patterns with descriptions'),
+      git: z.string().optional().describe('Git remote URL'),
+      links: z.record(z.string(), z.string()).optional().describe('External links (linear, figma, etc.)'),
+    },
+    async ({ name, projectPath, description, tags, patterns, git, links }) => {
+      const registry = loadRegistry();
+
+      if (registry.projects[name]) {
+        return { content: [{ type: 'text' as const, text: `Project "${name}" already exists. Use update_project to modify it.` }] };
+      }
+
+      if (!fs.existsSync(projectPath)) {
+        return { content: [{ type: 'text' as const, text: `Path does not exist: ${projectPath}` }] };
+      }
+
+      // Auto-detect git remote if not provided
+      let gitUrl = git;
+      if (!gitUrl) {
+        try {
+          gitUrl = execSync('git remote get-url origin', { cwd: projectPath, encoding: 'utf-8' }).trim();
+        } catch { /* no git remote */ }
+      }
+
+      registry.projects[name] = {
+        path: projectPath,
+        description: description || '',
+        tags: tags || [],
+        patterns: patterns || {},
+        git: gitUrl,
+        links: links || {},
+      };
+
+      saveRegistry(registry);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Registered "${name}" at ${projectPath}${gitUrl ? ` (git: ${gitUrl})` : ''}`,
+        }],
+      };
+    }
+  );
+
+  server.tool(
+    'update_project',
+    'Update an existing project\'s metadata (description, tags, patterns, links). Only provided fields are updated.',
+    {
+      name: z.string().describe('Project name to update'),
+      description: z.string().optional().describe('New description'),
+      tags: z.array(z.string()).optional().describe('Replace tags'),
+      patterns: z.record(z.string(), z.string()).optional().describe('Merge new patterns (existing keys are overwritten)'),
+      git: z.string().optional().describe('Update git URL'),
+      links: z.record(z.string(), z.string()).optional().describe('Merge new links'),
+    },
+    async ({ name, description, tags, patterns, git, links }) => {
+      const registry = loadRegistry();
+      const project = registry.projects[name];
+
+      if (!project) {
+        return { content: [{ type: 'text' as const, text: `Project "${name}" not found.` }] };
+      }
+
+      if (description !== undefined) project.description = description;
+      if (tags !== undefined) project.tags = tags;
+      if (patterns !== undefined) project.patterns = { ...project.patterns, ...patterns };
+      if (git !== undefined) project.git = git;
+      if (links !== undefined) project.links = { ...project.links, ...links };
+
+      saveRegistry(registry);
+
+      return {
+        content: [{ type: 'text' as const, text: `Updated "${name}".` }],
+      };
+    }
+  );
+
+  server.tool(
+    'remove_project',
+    'Unregister a project from the codebase registry. Does NOT delete any files.',
+    {
+      name: z.string().describe('Project name to remove'),
+    },
+    async ({ name }) => {
+      const registry = loadRegistry();
+
+      if (!registry.projects[name]) {
+        return { content: [{ type: 'text' as const, text: `Project "${name}" not found.` }] };
+      }
+
+      delete registry.projects[name];
+      saveRegistry(registry);
+
+      return {
+        content: [{ type: 'text' as const, text: `Removed "${name}" from registry. No files were deleted.` }],
+      };
+    }
+  );
+
+  server.tool(
+    'find_local_project',
+    'Search the local filesystem for a project folder by name. Useful for finding the path before registering.',
+    {
+      name: z.string().describe('Project folder name to search for'),
+      searchIn: z.string().optional().describe('Directory to search in (defaults to home directory)'),
+    },
+    async ({ name, searchIn }) => {
+      const searchDir = searchIn || os.homedir();
+
+      try {
+        const cmd = `find "${searchDir}" -maxdepth 4 -type d -name "${name}" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/Library/*" -not -path "*/.Trash/*" 2>/dev/null | head -10`;
+        const output = execSync(cmd, { encoding: 'utf-8', timeout: 10000 });
+        const paths = output.split('\n').filter(Boolean);
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: paths.length > 0
+              ? JSON.stringify({ found: paths.length, paths }, null, 2)
+              : `No directory named "${name}" found under ${searchDir}`,
+          }],
+        };
+      } catch {
+        return { content: [{ type: 'text' as const, text: 'Search timed out or failed.' }] };
+      }
+    }
+  );
+
+  return server;
+}
