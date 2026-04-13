@@ -220,7 +220,7 @@ The AI maintains full autonomy. It reads your code to understand the approach, t
 | `search_projects` | `query` | Search by keyword across names, descriptions, tags, and patterns |
 | `get_project_details` | `name` | Full details for a project including file structure overview |
 | `search_project_code` | `name`, `pattern`, `fileGlob?` | Search source code within a project (case-insensitive, regex supported) |
-| `read_project_file` | `name`, `filePath` | Read a specific file (path relative to project root, max 100KB) |
+| `read_project_file` | `name`, `filePath`, `startLine?`, `endLine?` | Read a file or specific line range (large files return first 500 lines with pagination) |
 
 ### Write tools (for managing the registry)
 
@@ -303,7 +303,7 @@ You can edit this file directly if you prefer — it's just JSON.
 
 - **Scoped access** — the MCP server can only read files from explicitly registered projects, never arbitrary paths
 - **Path traversal blocked** — resolved paths must stay within the project directory
-- **Size limits** — files over 100KB are rejected to prevent context flooding
+- **Smart pagination** — large files (>500 lines) return the first 500 lines with `startLine`/`endLine` support for reading specific sections
 - **Read-only project files** — the registry is read/write, but your actual project code is read-only
 - **No network** — Reuse never phones home, calls APIs, or sends data anywhere. It's entirely local.
 - **No credentials** — no API keys, tokens, or accounts needed
