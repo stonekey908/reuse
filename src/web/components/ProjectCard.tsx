@@ -41,6 +41,21 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  marginBottom: '0.5rem',
+  fontSize: '0.8rem',
+  color: '#555',
+};
+
+const sectionLabel: React.CSSProperties = {
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  color: '#333',
+  marginTop: '0.75rem',
+  marginBottom: '0.25rem',
+};
+
 const tagStyle: React.CSSProperties = {
   background: '#f0f0f0',
   padding: '0.125rem 0.5rem',
@@ -49,25 +64,160 @@ const tagStyle: React.CSSProperties = {
   color: '#444',
 };
 
+const kvRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '0.5rem',
+  marginBottom: '0.375rem',
+  alignItems: 'center',
+};
+
+const kvInputStyle: React.CSSProperties = {
+  ...inputStyle,
+  marginTop: 0,
+};
+
+function KeyValueEditor({
+  label,
+  entries,
+  onChange,
+  keyPlaceholder = 'key',
+  valuePlaceholder = 'value',
+}: {
+  label: string;
+  entries: Record<string, string>;
+  onChange: (entries: Record<string, string>) => void;
+  keyPlaceholder?: string;
+  valuePlaceholder?: string;
+}) {
+  const pairs = Object.entries(entries);
+
+  const updateKey = (oldKey: string, newKey: string) => {
+    const result: Record<string, string> = {};
+    for (const [k, v] of Object.entries(entries)) {
+      result[k === oldKey ? newKey : k] = v;
+    }
+    onChange(result);
+  };
+
+  const updateValue = (key: string, value: string) => {
+    onChange({ ...entries, [key]: value });
+  };
+
+  const addEntry = () => {
+    onChange({ ...entries, '': '' });
+  };
+
+  const removeEntry = (key: string) => {
+    const result = { ...entries };
+    delete result[key];
+    onChange(result);
+  };
+
+  return (
+    <div>
+      <div style={sectionLabel}>{label}</div>
+      {pairs.map(([key, value], i) => (
+        <div key={i} style={kvRowStyle}>
+          <input
+            value={key}
+            onChange={(e) => updateKey(key, e.target.value)}
+            placeholder={keyPlaceholder}
+            style={{ ...kvInputStyle, flex: '0 0 30%' }}
+          />
+          <input
+            value={value}
+            onChange={(e) => updateValue(key, e.target.value)}
+            placeholder={valuePlaceholder}
+            style={{ ...kvInputStyle, flex: 1 }}
+          />
+          <button
+            onClick={() => removeEntry(key)}
+            style={{ padding: '0.25rem 0.5rem', background: '#fee', border: '1px solid #fcc', borderRadius: 4, cursor: 'pointer', fontSize: '0.7rem', color: '#c00', flexShrink: 0 }}
+          >
+            x
+          </button>
+        </div>
+      ))}
+      <button
+        onClick={addEntry}
+        style={{ padding: '0.2rem 0.5rem', background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 4, cursor: 'pointer', fontSize: '0.7rem', marginTop: '0.25rem' }}
+      >
+        + Add {label.toLowerCase().replace(/s$/, '')}
+      </button>
+    </div>
+  );
+}
+
 export default function ProjectCard({ name, project, isEditing, onEdit, onUpdate, onDelete }: Props) {
+  const [formPath, setFormPath] = useState(project.path);
   const [description, setDescription] = useState(project.description || '');
   const [tags, setTags] = useState((project.tags || []).join(', '));
+  const [git, setGit] = useState(project.git || '');
+  const [patterns, setPatterns] = useState<Record<string, string>>({ ...project.patterns });
+  const [links, setLinks] = useState<Record<string, string>>({ ...project.links });
 
   if (isEditing) {
     return (
       <div style={editCardStyle}>
         <h3 style={{ margin: '0 0 0.75rem', fontSize: '1rem' }}>{name}</h3>
-        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.8rem', color: '#555' }}>
+
+        <label style={labelStyle}>
+          Path
+          <input value={formPath} onChange={(e) => setFormPath(e.target.value)} style={inputStyle} />
+        </label>
+
+        <label style={labelStyle}>
           Description
           <input value={description} onChange={(e) => setDescription(e.target.value)} style={inputStyle} />
         </label>
-        <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.8rem', color: '#555' }}>
+
+        <label style={labelStyle}>
           Tags (comma-separated)
           <input value={tags} onChange={(e) => setTags(e.target.value)} style={inputStyle} />
         </label>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+
+        <label style={labelStyle}>
+          Git URL
+          <input value={git} onChange={(e) => setGit(e.target.value)} placeholder="https://github.com/..." style={inputStyle} />
+        </label>
+
+        <KeyValueEditor
+          label="Patterns"
+          entries={patterns}
+          onChange={setPatterns}
+          keyPlaceholder="pattern name"
+          valuePlaceholder="description"
+        />
+
+        <KeyValueEditor
+          label="Links"
+          entries={links}
+          onChange={setLinks}
+          keyPlaceholder="service (e.g. linear, notion)"
+          valuePlaceholder="URL or identifier"
+        />
+
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
           <button
-            onClick={() => onUpdate(name, { description, tags: tags.split(',').map((t) => t.trim()).filter(Boolean) })}
+            onClick={() => {
+              // Filter out entries with empty keys
+              const cleanPatterns: Record<string, string> = {};
+              for (const [k, v] of Object.entries(patterns)) {
+                if (k.trim()) cleanPatterns[k.trim()] = v;
+              }
+              const cleanLinks: Record<string, string> = {};
+              for (const [k, v] of Object.entries(links)) {
+                if (k.trim()) cleanLinks[k.trim()] = v;
+              }
+              onUpdate(name, {
+                path: formPath,
+                description,
+                tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+                git: git || undefined,
+                patterns: cleanPatterns,
+                links: cleanLinks,
+              });
+            }}
             style={{ padding: '0.375rem 0.75rem', background: '#111', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: '0.8rem' }}
           >
             Save
