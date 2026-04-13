@@ -240,12 +240,14 @@ export function createReuseServer(): McpServer {
 
   server.tool(
     'read_project_file',
-    'Read a specific file from a registered project. Path must be relative to the project root.',
+    'Read a specific file from a registered project. Path must be relative to the project root. Supports reading specific line ranges for large files.',
     {
       name: z.string().describe('The project name exactly as registered in the registry (e.g. "schoolsync")'),
       filePath: z.string().describe('File path relative to project root (e.g. "src/components/Upload/index.tsx")'),
+      startLine: z.number().optional().describe('Start reading from this line number (1-based). Useful for large files.'),
+      endLine: z.number().optional().describe('Stop reading at this line number (inclusive). Useful for large files.'),
     },
-    async ({ name: projectName, filePath }) => {
+    async ({ name: projectName, filePath, startLine, endLine }) => {
       const registry = loadRegistry();
       const project = registry.projects[projectName];
 
@@ -265,15 +267,43 @@ export function createReuseServer(): McpServer {
       }
 
       const stat = fs.statSync(fullPath);
-      if (stat.size > 100 * 1024) {
-        return { content: [{ type: 'text' as const, text: `File too large (${Math.round(stat.size / 1024)}KB). Use search_project_code to find specific sections.` }] };
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      const lines = content.split('\n');
+      const totalLines = lines.length;
+
+      // If line range specified, return that range
+      if (startLine || endLine) {
+        const start = Math.max(1, startLine || 1);
+        const end = Math.min(totalLines, endLine || totalLines);
+        const slice = lines.slice(start - 1, end);
+        const numbered = slice.map((line, i) => `${start + i}: ${line}`).join('\n');
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `File: ${filePath} (lines ${start}-${end} of ${totalLines})\n\n${numbered}`,
+          }],
+        };
       }
 
-      const content = fs.readFileSync(fullPath, 'utf-8');
+      // For large files without a range, return first 500 lines with a note
+      const maxLines = 500;
+      if (stat.size > 100 * 1024 || totalLines > maxLines) {
+        const slice = lines.slice(0, maxLines);
+        const numbered = slice.map((line, i) => `${i + 1}: ${line}`).join('\n');
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `File: ${filePath} (lines 1-${maxLines} of ${totalLines}, ${Math.round(stat.size / 1024)}KB total)\n\nShowing first ${maxLines} lines. Use startLine/endLine to read specific sections.\n\n${numbered}`,
+          }],
+        };
+      }
+
       return {
         content: [{
           type: 'text' as const,
-          text: `File: ${filePath}\n\n${content}`,
+          text: `File: ${filePath} (${totalLines} lines)\n\n${content}`,
         }],
       };
     }
