@@ -80,7 +80,7 @@ export function startServer(port: number) {
   // Serve static frontend (built Vite output)
   const staticDir = path.resolve(__dirname, '../../dist-web');
   app.use(express.static(staticDir));
-  app.get('*', (_req, res) => {
+  app.get('{*path}', (_req, res) => {
     res.sendFile(path.join(staticDir, 'index.html'));
   });
 

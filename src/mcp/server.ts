@@ -5,13 +5,75 @@ import { searchProjects } from '../shared/search.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { execSync } from 'child_process';
+import { execSync, spawnSync } from 'child_process';
+
+function findRipgrep(): string | null {
+  // Check common locations
+  const candidates = [
+    'rg',
+    '/opt/homebrew/bin/rg',
+    '/usr/local/bin/rg',
+  ];
+  for (const candidate of candidates) {
+    try {
+      const result = spawnSync(candidate, ['--version'], { encoding: 'utf-8', timeout: 3000 });
+      if (result.status === 0) return candidate;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+function grepFallback(projectPath: string, pattern: string, fileGlob?: string): string {
+  // Node.js native recursive search as fallback when ripgrep isn't available
+  const results: string[] = [];
+  const regex = new RegExp(pattern, 'i');
+  const maxResults = 50;
+
+  function walk(dir: string) {
+    if (results.length >= maxResults) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch { return; }
+
+    for (const entry of entries) {
+      if (results.length >= maxResults) return;
+      if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') continue;
+
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile()) {
+        if (fileGlob) {
+          const ext = fileGlob.replace('*', '');
+          if (!entry.name.endsWith(ext)) continue;
+        }
+        try {
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          const lines = content.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            if (regex.test(lines[i])) {
+              const relPath = fullPath.replace(projectPath + '/', '');
+              results.push(`${relPath}:${i + 1}:${lines[i].trim()}`);
+              if (results.length >= maxResults) return;
+            }
+          }
+        } catch { /* skip binary/unreadable files */ }
+      }
+    }
+  }
+
+  walk(projectPath);
+  return results.join('\n');
+}
 
 export function createReuseServer(): McpServer {
   const server = new McpServer({
     name: 'reuse',
     version: '0.1.0',
   });
+
+  const rgPath = findRipgrep();
 
   // ─── READ TOOLS ───
 
@@ -72,9 +134,9 @@ export function createReuseServer(): McpServer {
 
   server.tool(
     'get_project_details',
-    'Get full details for a specific registered project including all patterns, links, and metadata',
+    'Get full details for a specific registered project including all patterns, links, and metadata. Use the project name from list_projects.',
     {
-      name: z.string().describe('Project name as registered (e.g. "schoolsync")'),
+      name: z.string().describe('The project name exactly as registered in the registry (e.g. "schoolsync", "gts-trade")'),
     },
     async ({ name }) => {
       const registry = loadRegistry();
@@ -109,55 +171,81 @@ export function createReuseServer(): McpServer {
 
   server.tool(
     'search_project_code',
-    'Search for a pattern in a registered project\'s codebase using ripgrep. Only searches within registered projects.',
+    'Search for a text pattern in a registered project\'s source code. Returns matching lines with file paths and line numbers. Case-insensitive.',
     {
-      project: z.string().describe('Project name as registered'),
-      pattern: z.string().describe('Search pattern (regex supported)'),
-      fileGlob: z.string().optional().describe('Optional file glob filter (e.g. "*.ts", "*.tsx")'),
+      name: z.string().describe('The project name exactly as registered in the registry (e.g. "schoolsync")'),
+      pattern: z.string().describe('Search pattern — text or regex (e.g. "Upload", "handleSubmit", "useState.*modal")'),
+      fileGlob: z.string().optional().describe('Optional file extension filter (e.g. "*.ts", "*.tsx", "*.py")'),
     },
-    async ({ project: projectName, pattern, fileGlob }) => {
+    async ({ name: projectName, pattern, fileGlob }) => {
       const registry = loadRegistry();
       const project = registry.projects[projectName];
 
       if (!project) {
-        return { content: [{ type: 'text' as const, text: `Project "${projectName}" not found.` }] };
+        return { content: [{ type: 'text' as const, text: `Project "${projectName}" not found. Use list_projects to see available projects.` }] };
       }
 
       if (!fs.existsSync(project.path)) {
         return { content: [{ type: 'text' as const, text: `Project path does not exist: ${project.path}` }] };
       }
 
-      try {
-        const globArg = fileGlob ? `--glob "${fileGlob}"` : '';
-        const cmd = `rg --no-heading --line-number --max-count 50 ${globArg} "${pattern}" "${project.path}" 2>/dev/null || true`;
-        const output = execSync(cmd, { encoding: 'utf-8', maxBuffer: 1024 * 1024 });
+      let output = '';
 
-        const relative = output
-          .split('\n')
-          .filter(Boolean)
-          .map((line) => line.replace(project.path + '/', ''))
-          .join('\n');
+      if (rgPath) {
+        // Use ripgrep with spawnSync to avoid shell escaping issues
+        const args = ['--no-heading', '--line-number', '--max-count', '50', '-i'];
+        if (fileGlob) {
+          args.push('--glob', fileGlob);
+        }
+        args.push(pattern, project.path);
 
+        const result = spawnSync(rgPath, args, {
+          encoding: 'utf-8',
+          maxBuffer: 1024 * 1024,
+          timeout: 15000,
+        });
+
+        output = (result.stdout || '').trim();
+      }
+
+      if (!output) {
+        // Fallback to Node.js native search
+        output = grepFallback(project.path, pattern, fileGlob);
+      }
+
+      if (!output) {
         return {
           content: [{
             type: 'text' as const,
-            text: relative || `No matches for "${pattern}" in ${projectName}`,
+            text: `No matches for "${pattern}" in ${projectName}`,
           }],
         };
-      } catch {
-        return { content: [{ type: 'text' as const, text: 'Search failed. Is ripgrep (rg) installed?' }] };
       }
+
+      // Make paths relative to project root
+      const relative = output
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => line.replace(project.path + '/', ''))
+        .join('\n');
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: relative,
+        }],
+      };
     }
   );
 
   server.tool(
     'read_project_file',
-    'Read a specific file from a registered project. Path must be relative to the project root. Only reads from registered projects.',
+    'Read a specific file from a registered project. Path must be relative to the project root.',
     {
-      project: z.string().describe('Project name as registered'),
+      name: z.string().describe('The project name exactly as registered in the registry (e.g. "schoolsync")'),
       filePath: z.string().describe('File path relative to project root (e.g. "src/components/Upload/index.tsx")'),
     },
-    async ({ project: projectName, filePath }) => {
+    async ({ name: projectName, filePath }) => {
       const registry = loadRegistry();
       const project = registry.projects[projectName];
 
@@ -248,7 +336,7 @@ export function createReuseServer(): McpServer {
     'update_project',
     'Update an existing project\'s metadata (description, tags, patterns, links). Only provided fields are updated.',
     {
-      name: z.string().describe('Project name to update'),
+      name: z.string().describe('The project name exactly as registered in the registry'),
       description: z.string().optional().describe('New description'),
       tags: z.array(z.string()).optional().describe('Replace tags'),
       patterns: z.record(z.string(), z.string()).optional().describe('Merge new patterns (existing keys are overwritten)'),
@@ -281,7 +369,7 @@ export function createReuseServer(): McpServer {
     'remove_project',
     'Unregister a project from the codebase registry. Does NOT delete any files.',
     {
-      name: z.string().describe('Project name to remove'),
+      name: z.string().describe('The project name exactly as registered in the registry'),
     },
     async ({ name }) => {
       const registry = loadRegistry();
