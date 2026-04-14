@@ -25,6 +25,26 @@ then configure it as an MCP server in my editor settings.
 
 The AI will handle cloning, building, and wiring up the MCP config for your specific environment. Once set up, you can immediately start registering projects and asking the AI to reference them.
 
+## Screenshots
+
+### CLI — One command to see everything Reuse can do
+![CLI overview showing available commands](docs/screenshots/01-cli-overview.png)
+
+### Register a project through the web UI
+![Web form for registering a project with name, path, description, tags, and git URL](docs/screenshots/02-register-project.png)
+
+### Rich project detail view with tags, patterns, and links
+![Project detail card showing metadata, technology tags, reusable patterns, and external links](docs/screenshots/03-project-detail.png)
+
+### Full MCP tool suite — 9 tools your AI assistant can call
+![Table of all MCP tools with descriptions of what each one does](docs/screenshots/04-mcp-tools.png)
+
+### MCP in action — updating and querying project metadata
+![Terminal showing AI using update_project and get_project_details MCP tools](docs/screenshots/05-mcp-in-action.png)
+
+### AI-assisted code search and reuse commentary
+![AI searching project code, reading a component, and providing reuse analysis with adaptation steps](docs/screenshots/06-code-search-reuse.png)
+
 ## Manual Setup
 
 ### Prerequisites
