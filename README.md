@@ -339,6 +339,15 @@ You can edit this file directly if you prefer — it's just JSON.
 - Run `npm link` from the reuse directory
 - Or use `node /path/to/reuse/dist/cli/index.js` directly
 
+**`reuse serve` fails with `invalid choice: 'serve'`:**
+- Debian/Ubuntu (and WSL) ship a `reuse` package (the SPDX license tool) at `/usr/bin/reuse` that shadows this CLI. Check with `which -a reuse`.
+- Quickest fix — add an alias to `~/.bashrc` (or `~/.zshrc`):
+  ```bash
+  alias reuse='node /FULL/PATH/TO/reuse/dist/cli/index.js'
+  ```
+- Or run the CLI directly: `node /FULL/PATH/TO/reuse/dist/cli/index.js serve`
+- Or uninstall the SPDX tool if you don't use it: `sudo apt remove reuse`
+
 **Search returning no results:**
 - Reuse searches with a built-in Node.js grep (no external tools required)
 - If ripgrep (`rg`) is installed at `/opt/homebrew/bin/rg` or `/usr/local/bin/rg`, it will use that instead for better performance
