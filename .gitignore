@@ -4,3 +4,4 @@ dist-web/
 *.tsbuildinfo
 .env
 .env.local
+.DS_Store

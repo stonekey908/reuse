@@ -181,6 +181,29 @@ The AI will call `register_project` with the path, description, and tags it infe
 
 The AI will use `find_local_project` to locate the directory, then register it.
 
+### Automatic pattern extraction
+
+When a project is registered *without* patterns, Reuse proactively nudges the AI toward `extract_patterns` — a tool that scouts the project (README, package.json, directory tree, representative source files) and returns a structured scouting report. The AI reads a handful of the suggested files, identifies 5–8 distinctive patterns, and saves them with `update_project`.
+
+> "Add ~/projects/graph-engine to reuse"
+
+Under the hood:
+
+```
+1. register_project({ name: "graph-engine", projectPath: "~/projects/graph-engine" })
+   → Registered. Nudge: "No patterns supplied — call extract_patterns next."
+
+2. extract_patterns({ name: "graph-engine" })
+   → Scouting report: README excerpt, deps, tree, suggestedFilesToRead.
+
+3. read_project_file x3–6 on the most interesting files.
+
+4. update_project({ name: "graph-engine", patterns: { ... } })
+   → 5–8 named kebab-case patterns referencing exact file paths.
+```
+
+You get proper pattern coverage by default instead of hoping the registering human remembers to write them out. Good patterns make projects searchable by their *distinctive ideas*, not just by their tech stack.
+
 ### Via CLI
 
 ```bash
@@ -246,8 +269,9 @@ The AI maintains full autonomy. It reads your code to understand the approach, t
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `register_project` | `name`, `projectPath`, `description?`, `tags?`, `patterns?`, `git?`, `links?` | Register a new project (auto-detects git remote) |
-| `update_project` | `name`, `description?`, `tags?`, `patterns?`, `git?`, `links?` | Update any metadata field |
+| `register_project` | `name`, `projectPath`, `description?`, `tags?`, `patterns?`, `git?`, `links?` | Register a new project (auto-detects git remote). If no patterns are supplied, the response nudges the AI to run `extract_patterns` next. |
+| `extract_patterns` | `name` | Scout a registered project for reusable patterns. Returns a structured report (README excerpt, package.json summary, directory tree, representative source files) for the AI to identify 5-8 distinctive patterns. |
+| `update_project` | `name`, `description?`, `tags?`, `patterns?`, `git?`, `links?` | Update any metadata field. Patterns merge (existing keys are overwritten). |
 | `remove_project` | `name` | Unregister a project (does NOT delete files) |
 | `find_local_project` | `name`, `searchIn?` | Search filesystem for a project folder by name |
 
@@ -288,6 +312,19 @@ AI calls Reuse MCP tools:
   3. search_project_code("photos-app", "upload") → finds relevant source files
   4. read_project_file("photos-app", "src/Upload/index.tsx") → reads the actual code
   5. Adapts the approach for the current project's stack and context
+```
+
+And during registration:
+
+```
+You register a new project:
+  "Add ~/projects/graph-engine to reuse"
+
+AI calls Reuse MCP tools:
+  1. register_project(...) → registered, nudged to extract patterns
+  2. extract_patterns("graph-engine") → scouting report with suggested files
+  3. read_project_file x3–6 on the key files
+  4. update_project({ name, patterns: {...} }) → 5–8 named patterns saved
 ```
 
 The AI can also use your other tools alongside Reuse. If a project has a Linear link, the AI can check Linear for related tickets. If it has a Notion link, it can pull docs. Reuse is the index — your other tools provide the depth.
