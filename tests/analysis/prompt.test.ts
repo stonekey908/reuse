@@ -53,7 +53,7 @@ describe('buildPrompt', () => {
 
   it('omits the prior-clusters section when none provided', () => {
     const prompt = buildPrompt({ patterns });
-    expect(prompt).not.toContain('Previous clusters');
+    expect(prompt).not.toContain('Previous analysis items');
   });
 
   it('seeds the prior-clusters section when provided', () => {
@@ -67,7 +67,7 @@ describe('buildPrompt', () => {
       },
     ];
     const prompt = buildPrompt({ priorClusters, patterns });
-    expect(prompt).toContain('Previous clusters');
+    expect(prompt).toContain('Previous analysis items');
     expect(prompt).toContain('"Document upload"');
     expect(prompt).toContain('Patterns for uploading documents');
   });

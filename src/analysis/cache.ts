@@ -3,7 +3,7 @@ import {
   computeRegistryFingerprint,
 } from '../shared/fingerprint.js';
 import { saveRegistry } from '../shared/registry.js';
-import type { Cluster, Registry } from '../shared/types.js';
+import type { AnalysisItem, Registry } from '../shared/types.js';
 
 export type ChangedProjects = {
   added: string[];
@@ -18,7 +18,7 @@ export type StalenessResult = {
   changedProjects?: ChangedProjects;
 };
 
-export function writeAnalysis(registry: Registry, clusters: Cluster[]): Registry {
+export function writeAnalysis(registry: Registry, clusters: AnalysisItem[]): Registry {
   const updated: Registry = {
     ...registry,
     analysis: {

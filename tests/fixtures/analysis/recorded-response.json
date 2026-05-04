@@ -47,13 +47,12 @@
       "differences": "alpha-app names by intensity (light/medium/heavy); delta-mobile names by intent (confirm/warn/error). delta-mobile's mapping is more opinionated."
     },
     {
+      "kind": "standalone",
       "capability": "Background task lifecycle",
-      "description": "Long-running task UI lifecycle with progress.",
-      "members": [
-        { "project": "bravo-platform", "patternKey": "background-task-provider", "summary": "React context with topbar progress beacon and cross-route persistence." }
-      ],
-      "similarities": "Single-member cluster — only bravo-platform exposes an explicit background task lifecycle to the UI.",
-      "differences": "n/a"
+      "description": "Long-running task UI lifecycle with topbar progress.",
+      "member": { "project": "bravo-platform", "patternKey": "background-task-provider", "summary": "React context with topbar progress beacon and cross-route persistence." },
+      "rationale": "The only registered pattern that exposes a generic long-running-task lifecycle to the UI rather than per-call progress callbacks.",
+      "closestRelative": "alpha-app/chunked-file-upload exposes per-upload progress, but only inside the upload component — not a reusable lifecycle abstraction."
     },
     {
       "capability": "CLI ergonomics",
@@ -66,22 +65,20 @@
       "differences": "echo-design-system's CLI emits files into the consumer; charlie-cli's runs to completion and exits."
     },
     {
-      "capability": "OCR",
-      "description": "Optical character recognition pipelines.",
-      "members": [
-        { "project": "delta-mobile", "patternKey": "single-provider-gemini-ocr", "summary": "Direct Gemini OCR call via Cloud Functions." }
-      ],
-      "similarities": "Single-member cluster.",
-      "differences": "n/a"
+      "kind": "standalone",
+      "capability": "OCR via cloud-function proxy",
+      "description": "Optical character recognition by calling Gemini through a Firebase Cloud Function.",
+      "member": { "project": "delta-mobile", "patternKey": "single-provider-gemini-ocr", "summary": "Direct Gemini OCR call via Cloud Functions." },
+      "rationale": "The only OCR pattern in the registry; uses cloud functions specifically to keep API keys off the client.",
+      "closestRelative": "alpha-app/multi-provider-ai-router talks to the same provider but for chat, not OCR — different input modality and routing strategy."
     },
     {
-      "capability": "Theming",
-      "description": "Design tokens and runtime theme switching.",
-      "members": [
-        { "project": "echo-design-system", "patternKey": "theme-tokens-with-presets", "summary": "Five preset palettes + three densities switchable at runtime." }
-      ],
-      "similarities": "Single-member cluster.",
-      "differences": "n/a"
+      "kind": "standalone",
+      "capability": "Design tokens and theming",
+      "description": "Runtime-switchable design tokens with presets.",
+      "member": { "project": "echo-design-system", "patternKey": "theme-tokens-with-presets", "summary": "Five preset palettes + three densities switchable at runtime." },
+      "rationale": "echo-design-system is the only project in the registry that ships design tokens; no other registered pattern addresses styling primitives.",
+      "closestRelative": "alpha-app/haptic-feedback-abstraction uses presets too, but for a different primitive (haptics, not styling) — surface similarity only."
     }
   ]
 }

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import StalenessBanner from './StalenessBanner';
 import ClusterCard from './ClusterCard';
+import StandalonePatternCard from './StandalonePatternCard';
 
 type ClusterMember = { project: string; patternKey: string; summary: string };
 type Cluster = {
+  kind?: 'cluster';
   capability: string;
   description: string;
   members: ClusterMember[];
@@ -11,12 +13,22 @@ type Cluster = {
   differences: string;
   consolidationNote?: string;
 };
+type StandalonePattern = {
+  kind: 'standalone';
+  capability: string;
+  description: string;
+  member: ClusterMember;
+  rationale: string;
+  closestRelative: string;
+  notes?: string;
+};
+type AnalysisItem = Cluster | StandalonePattern;
 
 type Analysis = {
   generatedAt: string;
   registryFingerprint: string;
   projectFingerprints: Record<string, string>;
-  clusters: Cluster[];
+  clusters: AnalysisItem[];
 };
 
 type AnalysisResponse = {
@@ -173,9 +185,13 @@ export default function AnalysisTab() {
 
       {clusters.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-          {clusters.map((cluster) => (
-            <ClusterCard key={cluster.capability} cluster={cluster} />
-          ))}
+          {clusters.map((item) =>
+            item.kind === 'standalone' ? (
+              <StandalonePatternCard key={`standalone-${item.capability}`} item={item} />
+            ) : (
+              <ClusterCard key={`cluster-${item.capability}`} cluster={item} />
+            ),
+          )}
         </div>
       )}
 
