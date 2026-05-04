@@ -1,4 +1,4 @@
-import type { Cluster, Registry } from '../shared/types.js';
+import type { AnalysisItem, Registry } from '../shared/types.js';
 
 export type PatternEntry = {
   project: string;
@@ -23,13 +23,13 @@ export function buildPrompt({
   patterns,
   strict = false,
 }: {
-  priorClusters?: Cluster[];
+  priorClusters?: AnalysisItem[];
   patterns: PatternEntry[];
   strict?: boolean;
 }): string {
   const priorSection = priorClusters && priorClusters.length > 0
-    ? `Previous clusters from the last analysis (preserve these names where the meaning still applies; rename only if meaning has genuinely shifted; drop clusters with no remaining members):
-${priorClusters.map((c) => `  - "${c.capability}" — ${c.description}`).join('\n')}
+    ? `Previous analysis items from the last run (preserve these names where the meaning still applies; rename only if meaning has genuinely shifted; drop items whose patterns are gone):
+${priorClusters.map((c) => `  - "${c.capability}" (${c.kind === 'standalone' ? 'standalone' : 'cluster'}) — ${c.description}`).join('\n')}
 
 `
     : '';
@@ -47,27 +47,40 @@ ${priorSection}Current patterns (${patterns.length} patterns across ${projectCou
 ${patternsList}
 
 Rules:
-- Each pattern joins exactly one cluster.
-- Reuse a previous cluster name when the meaning still applies. Drop clusters that no longer have members.
-- **Aim for HIGH-LEVEL capability names, not strategy names.** Cluster names must be the problem domain ("Document upload", "AI provider integration", "Encryption", "CLI tooling conventions") — never an implementation strategy or a single project's specific approach. Implementation specifics (kebab-case, AES-GCM, tus, chunked, claude -p) belong in member summaries and the differences section, NOT in the cluster header.
-- **Strategy diversity is a STRENGTH of a cluster, not a reason to split.** When members address the same problem via different strategies (multi-provider routing vs CLI shell-out vs single-provider direct call), they belong in the SAME cluster — that's exactly the consolidation insight the developer wants. Spell out the divergent strategies in the differences field. Splitting strategies into separate clusters destroys the comparison.
-- **Don't force unrelated patterns together.** A cluster must reflect a genuine shared capability, not a vague umbrella. If consolidating two patterns requires you to write "skip — divergence is fundamental" in the consolidationNote, they belong in separate clusters. Singletons are fine when justified.
-- "similarities" and "differences" must be substantive prose — at least two sentences each — citing concrete shared mechanisms or concrete divergences. Never write "they are similar" or "Single member." placeholders.
-- For genuine singletons: write similarities as a one-sentence rationale ("what makes this pattern its own category") and differences as a one-sentence note on what the closest related pattern in the registry is and why it doesn't fit.
-- "consolidationNote" is optional. Include it ONLY when there is a concrete reuse suggestion. End every consolidationNote with a parenthetical effort/payoff judgment: "(low effort, high reuse)", "(medium effort, medium reuse)", or "(skip — divergence is fundamental)". When relevant, name the proposed API surface (e.g. an "upload(stream, opts) → progress events" function shape).
+- Each pattern joins exactly one item — either a multi-member cluster or a standalone pattern.
+- Reuse a previous item's name when the meaning still applies. Drop items whose patterns are gone.
+- **There are TWO output shapes**, distinguished by a "kind" field:
+  - **\`kind: "cluster"\`** — two or more patterns sharing a capability. Has \`members[]\`, \`similarities\`, \`differences\`, optional \`consolidationNote\`.
+  - **\`kind: "standalone"\`** — a single pattern that genuinely doesn't fit any multi-member cluster. Has a single \`member\`, plus \`rationale\` (why it stands alone) and \`closestRelative\` (the nearest registered pattern + why it doesn't fit).
+- **Aim for HIGH-LEVEL capability names, not strategy names.** Capability names must be the problem domain ("Document upload", "AI provider integration", "Encryption") — never an implementation strategy or a single project's specific approach. Implementation specifics (kebab-case, AES-GCM, tus, chunked, claude -p) belong in member summaries and the differences section, NOT in the capability header.
+- **Strategy diversity is a STRENGTH of a cluster, not a reason to split.** When members address the same problem via different strategies (multi-provider routing vs CLI shell-out vs single-provider direct call), they belong in the SAME cluster. Spell out the divergent strategies in the differences field. Splitting strategies into separate clusters destroys the comparison.
+- **Don't force unrelated patterns together.** A cluster must reflect a genuine shared capability, not a vague umbrella. If consolidating two patterns requires writing "skip — divergence is fundamental" in the consolidationNote, they belong as standalone items, not in one cluster. Likewise, if the consolidationNote admits that one or more members would NOT benefit from the proposed shared abstraction, the cluster is too broad — pull those members out as standalone items.
+- **Capability names must be framework-agnostic.** Never put framework, library, or vendor names in the capability header — "shadcn-style", "expo-haptics", "tus", "AES-GCM", "claude -p" all belong in member summaries or descriptions, not in the capability name itself. Use the abstract problem name: "Component distribution via source-copy", "Haptic feedback", "Resumable file upload", "At-rest encryption".
+- For multi-member clusters: \`similarities\` and \`differences\` must be substantive prose — at least two sentences each — citing concrete shared mechanisms or concrete divergences. Never write "they are similar" or "Single member." placeholders.
+- For standalone items: \`rationale\` is one sentence on what makes this pattern its own category. \`closestRelative\` is one sentence naming the nearest registered pattern (by project + key) and why it doesn't share enough to cluster. NEVER use the rationale or closestRelative fields to say "single member" — they exist precisely to replace those placeholders.
+- \`consolidationNote\` is optional and ONLY applies to clusters. Include it when there is a concrete reuse suggestion. End every consolidationNote with a parenthetical effort/payoff judgment: "(low effort, high reuse)", "(medium effort, medium reuse)", or "(skip — divergence is fundamental)". When relevant, name the proposed API surface (e.g. an "upload(stream, opts) → progress events" function shape).
 
-Return strict JSON matching exactly this shape:
+Return strict JSON matching exactly this shape (the array can mix both kinds):
 {
   "clusters": [
     {
+      "kind": "cluster",
       "capability": "string — short capability name like 'Document upload'",
       "description": "string — one-line summary of what unites this cluster",
       "members": [
         { "project": "project name", "patternKey": "pattern key", "summary": "1-line summary of how this member implements the capability" }
       ],
-      "similarities": "string — what cluster members share, in natural language",
-      "differences": "string — how cluster members diverge, in natural language",
-      "consolidationNote": "string (optional) — concrete reuse / consolidation suggestion, only if applicable"
+      "similarities": "string — what cluster members share, in natural language (≥2 sentences)",
+      "differences": "string — how cluster members diverge, in natural language (≥2 sentences)",
+      "consolidationNote": "string (optional) — concrete reuse / consolidation suggestion ending with effort/payoff judgment"
+    },
+    {
+      "kind": "standalone",
+      "capability": "string — short capability name",
+      "description": "string — one-line summary of what this pattern does",
+      "member": { "project": "project name", "patternKey": "pattern key", "summary": "1-line summary" },
+      "rationale": "string — one sentence on why this stands alone as its own category",
+      "closestRelative": "string — name the nearest registered pattern (by project + key) and why it doesn't share enough to cluster"
     }
   ]
 }${strictSuffix}`;

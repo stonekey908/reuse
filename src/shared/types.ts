@@ -16,6 +16,7 @@ export const ClusterMemberSchema = z.object({
 });
 
 export const ClusterSchema = z.object({
+  kind: z.literal('cluster').optional().describe('Discriminator; absence implies "cluster" for back-compat with legacy caches'),
   capability: z.string().describe('Cluster name, e.g. "Document upload"'),
   description: z.string().describe('One-line summary of the cluster'),
   members: z.array(ClusterMemberSchema),
@@ -24,11 +25,23 @@ export const ClusterSchema = z.object({
   consolidationNote: z.string().optional().describe('Optional reuse / consolidation suggestion'),
 });
 
+export const StandalonePatternSchema = z.object({
+  kind: z.literal('standalone').describe('Discriminator'),
+  capability: z.string().describe('Capability name as standalone'),
+  description: z.string().describe('One-line summary of what this pattern does'),
+  member: ClusterMemberSchema.describe('The single pattern this entry represents'),
+  rationale: z.string().describe('Why this pattern stands alone — what makes it its own category'),
+  closestRelative: z.string().describe('The nearest related pattern in the registry and why it does not fit'),
+  notes: z.string().optional().describe('Optional extra notes'),
+});
+
+export const AnalysisItemSchema = z.union([StandalonePatternSchema, ClusterSchema]);
+
 export const AnalysisSchema = z.object({
   generatedAt: z.string().describe('ISO timestamp of when this analysis was generated'),
   registryFingerprint: z.string().describe('sha256 of canonical patterns JSON at generation time'),
   projectFingerprints: z.record(z.string(), z.string()).describe('Per-project pattern fingerprints — used to compute changed-projects diff on staleness check'),
-  clusters: z.array(ClusterSchema),
+  clusters: z.array(AnalysisItemSchema).describe('Mixed array of multi-member clusters and standalone patterns'),
 });
 
 export const RegistrySchema = z.object({
@@ -40,4 +53,14 @@ export type Project = z.infer<typeof ProjectSchema>;
 export type Registry = z.infer<typeof RegistrySchema>;
 export type Analysis = z.infer<typeof AnalysisSchema>;
 export type Cluster = z.infer<typeof ClusterSchema>;
+export type StandalonePattern = z.infer<typeof StandalonePatternSchema>;
+export type AnalysisItem = z.infer<typeof AnalysisItemSchema>;
 export type ClusterMember = z.infer<typeof ClusterMemberSchema>;
+
+export function isStandalone(item: AnalysisItem): item is StandalonePattern {
+  return item.kind === 'standalone';
+}
+
+export function isCluster(item: AnalysisItem): item is Cluster {
+  return item.kind !== 'standalone';
+}
