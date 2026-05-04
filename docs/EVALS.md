@@ -78,6 +78,29 @@ The script writes a markdown report to `eval-results/YYYY-MM-DD-HHMM.md` and pri
 
 E2 is **manual only — never CI.** It's slow, non-deterministic, and the goal is exploratory tuning, not regression gating. E1 covers regression in CI.
 
+## Extract-patterns eval (input-side)
+
+The clustering analysis is only as good as the patterns the registry contains. If `extract_patterns` misses a major module in a project, the clustering can't recover from it. The extract eval guards the input side.
+
+**Two layers:**
+
+- **Layer 1 — scout snapshot (deterministic, fast).** The `extract_patterns` MCP tool is a synchronous scout that returns a directory tree, README, package.json, and a `suggestedFilesToRead` list. Layer 1 asserts that for a Turborepo-shaped fixture (`tests/fixtures/extract-patterns/sample-monorepo/`), the scout covers a representative file from every workspace module — apps and packages alike. This is the layer where the codeview MCP-server gap from STO-2158 lived.
+- **Layer 2 — judge eval (LLM-in-the-loop, manual).** Sends the scout report to `claude -p` with the extraction instructions, gets back proposed patterns, then a second `claude -p` scores against ground-truth concerns from the fixture's `expected.json`. Writes a dated `extract-YYYY-MM-DD-HHMM.md` report.
+
+**How to run.**
+
+```bash
+# Layer 1 — scout snapshot (runs as part of npm test too)
+reuse eval --extract
+
+# Layer 2 — LLM-as-judge
+reuse eval --extract --quality
+# or:
+npm run eval:extract
+```
+
+**Updating the fixture.** When the fixture monorepo grows, add the new module to `tests/fixtures/extract-patterns/expected.json` under `expectedModules` with the fileFragment that scout's `suggestedFilesToRead` should match.
+
 ## Updating fixtures
 
 The fixture is in `tests/fixtures/analysis/`:

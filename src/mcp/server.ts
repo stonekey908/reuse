@@ -10,6 +10,7 @@ import {
   runAnalysis,
   type ClaudeRunner,
 } from '../analysis/runner.js';
+import { buildScoutReport } from '../analysis/scout.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -322,128 +323,6 @@ export function createReuseServer(options: CreateReuseServerOptions = {}): McpSe
     }
   );
 
-  // ─── PATTERN EXTRACTION ───
-
-  /**
-   * Directories to skip when walking a project tree.
-   * Kept liberal: the scouting report is meant to surface *source* structure.
-   */
-  const SKIP_DIRS = new Set([
-    'node_modules', '.git', 'dist', 'build', '.next', '.vite', '.turbo',
-    '.cache', 'coverage', '.nuxt', 'out', '.output', '__pycache__',
-    '.pytest_cache', '.mypy_cache', 'vendor', 'target',
-  ]);
-
-  const INTERESTING_DIRS = new Set([
-    'src', 'packages', 'apps', 'lib', 'components', 'hooks', 'utils',
-    'services', 'features', 'modules', 'server', 'app', 'pages',
-  ]);
-
-  interface TreeNode {
-    name: string;
-    type: 'dir' | 'file';
-    size?: number;
-    children?: TreeNode[];
-  }
-
-  function walkTree(dir: string, maxDepth = 3, depth = 0): TreeNode[] {
-    if (depth >= maxDepth) return [];
-    let entries: fs.Dirent[];
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
-    catch { return []; }
-
-    const nodes: TreeNode[] = [];
-    for (const entry of entries) {
-      if (entry.name.startsWith('.') && entry.name !== '.env.example') continue;
-      if (SKIP_DIRS.has(entry.name)) continue;
-
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        nodes.push({
-          name: entry.name,
-          type: 'dir',
-          children: walkTree(full, maxDepth, depth + 1),
-        });
-      } else if (entry.isFile()) {
-        let size = 0;
-        try { size = fs.statSync(full).size; } catch { /* ignore */ }
-        nodes.push({ name: entry.name, type: 'file', size });
-      }
-    }
-    // Sort: dirs first, then files, alphabetical within
-    nodes.sort((a, b) => {
-      if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-    return nodes;
-  }
-
-  function formatTree(nodes: TreeNode[], indent = 0): string {
-    const lines: string[] = [];
-    const pad = '  '.repeat(indent);
-    for (const node of nodes) {
-      if (node.type === 'dir') {
-        lines.push(`${pad}${node.name}/`);
-        if (node.children && node.children.length) {
-          lines.push(formatTree(node.children, indent + 1));
-        }
-      } else {
-        const sizeStr = node.size !== undefined ? ` (${formatSize(node.size)})` : '';
-        lines.push(`${pad}${node.name}${sizeStr}`);
-      }
-    }
-    return lines.filter(Boolean).join('\n');
-  }
-
-  function formatSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes}B`;
-    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
-    return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
-  }
-
-  /** Return a shortlist of likely-interesting files to point the AI at first. */
-  function pickRepresentativeFiles(projectRoot: string, tree: TreeNode[]): string[] {
-    const suggestions: string[] = [];
-    const srcFileExts = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.swift', '.kt']);
-
-    function scan(nodes: TreeNode[], prefix: string) {
-      for (const node of nodes) {
-        if (node.type === 'file') {
-          const ext = path.extname(node.name);
-          if (!srcFileExts.has(ext)) continue;
-          if ((node.size ?? 0) < 120) continue;              // skip trivial
-          if ((node.size ?? 0) > 40 * 1024) continue;        // skip huge
-          suggestions.push(path.join(prefix, node.name));
-        } else if (node.type === 'dir' && node.children) {
-          // Prioritise dirs that look like source
-          const deeper = path.join(prefix, node.name);
-          if (INTERESTING_DIRS.has(node.name) || prefix.includes('src') || prefix.includes('packages')) {
-            scan(node.children, deeper);
-          } else if (prefix === '') {
-            // Only descend into top-level dirs that matter
-            scan(node.children, deeper);
-          }
-        }
-      }
-    }
-
-    scan(tree, '');
-    // Rank by path depth ascending (top-level first) and cap list
-    suggestions.sort((a, b) => a.split(path.sep).length - b.split(path.sep).length);
-    return suggestions.slice(0, 20).map((p) => p.split(path.sep).join('/'));
-  }
-
-  function readSafely(filePath: string, maxBytes = 8 * 1024): string | null {
-    try {
-      const stat = fs.statSync(filePath);
-      if (stat.size === 0) return null;
-      const buf = fs.readFileSync(filePath);
-      const text = buf.toString('utf-8');
-      if (text.length > maxBytes) return text.slice(0, maxBytes) + '\n…[truncated]';
-      return text;
-    } catch { return null; }
-  }
-
   server.tool(
     'extract_patterns',
     'Scout a registered project for reusable patterns. Returns a scouting report (README excerpt, package.json, directory tree, representative file list) that the AI should use to identify 5-8 distinctive named patterns. After reviewing the report (and optionally reading suggested files with read_project_file), the AI should call update_project with a `patterns` object mapping kebab-case names to 1-2 sentence descriptions referencing file paths. Prefer patterns that are non-obvious, reusable across projects, and unlikely to be reinvented without reference.',
@@ -452,82 +331,14 @@ export function createReuseServer(options: CreateReuseServerOptions = {}): McpSe
     },
     async ({ name: projectName }) => {
       const registry = loadRegistry();
-      const project = registry.projects[projectName];
-
-      if (!project) {
-        return { content: [{ type: 'text' as const, text: `Project "${projectName}" not found. Use list_projects.` }] };
+      const outcome = buildScoutReport(projectName, registry);
+      if (!outcome.ok) {
+        return { content: [{ type: 'text' as const, text: outcome.error }] };
       }
-      if (!fs.existsSync(project.path)) {
-        return { content: [{ type: 'text' as const, text: `Path does not exist: ${project.path}` }] };
-      }
-
-      // README (try several common filenames)
-      const readmeCandidates = ['README.md', 'readme.md', 'README.MD', 'README.txt', 'README'];
-      let readme: string | null = null;
-      let readmeName = '';
-      for (const n of readmeCandidates) {
-        const p = path.join(project.path, n);
-        if (fs.existsSync(p)) {
-          readme = readSafely(p, 6 * 1024);
-          readmeName = n;
-          break;
-        }
-      }
-
-      // package.json (keep only the fields that signal tech stack)
-      let packageSummary: Record<string, unknown> | null = null;
-      const pkgPath = path.join(project.path, 'package.json');
-      if (fs.existsSync(pkgPath)) {
-        try {
-          const raw = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-          packageSummary = {
-            name: raw.name,
-            version: raw.version,
-            type: raw.type,
-            scripts: raw.scripts,
-            dependencies: raw.dependencies,
-            devDependencies: raw.devDependencies,
-            workspaces: raw.workspaces,
-          };
-        } catch { /* ignore malformed package.json */ }
-      }
-
-      // Directory tree (2-3 levels deep)
-      const tree = walkTree(project.path, 3);
-      const treeText = formatTree(tree);
-
-      // Representative source files
-      const suggested = pickRepresentativeFiles(project.path, tree);
-
-      const report = {
-        project: {
-          name: projectName,
-          path: project.path,
-          description: project.description,
-          tags: project.tags,
-          existingPatterns: project.patterns,
-        },
-        readme: readme
-          ? { filename: readmeName, excerpt: readme }
-          : { note: 'No README found at project root.' },
-        packageJson: packageSummary ?? { note: 'No package.json found.' },
-        directoryTree: treeText,
-        suggestedFilesToRead: suggested,
-        instructions: [
-          '1. Review the README excerpt and package.json to understand what this project is and what stack it uses.',
-          '2. Scan the directory tree for distinctive structure (custom hooks, monorepo packages, analyzer modules, etc).',
-          '3. Use read_project_file to open 3-6 of the suggestedFilesToRead that look most interesting for extracting reusable ideas.',
-          '4. Identify 5-8 genuinely reusable patterns. Each should be: non-obvious, transferable to other projects, and worth referencing rather than reinventing.',
-          '5. Skip patterns that are obvious to any React/Next.js/Node developer, or that just restate boilerplate.',
-          '6. Call update_project with a `patterns` object: { "kebab-case-name": "1-2 sentence description referencing exact file paths (e.g. /packages/foo/src/bar.ts)" }.',
-          '7. Good pattern names describe WHAT: "multi-ai-provider-abstraction", "theme-system-with-presets", "chunked-file-upload-with-retry". Avoid generic names like "utils" or "helpers".',
-        ],
-      };
-
       return {
         content: [{
           type: 'text' as const,
-          text: JSON.stringify(report, null, 2),
+          text: JSON.stringify(outcome.report, null, 2),
         }],
       };
     }
