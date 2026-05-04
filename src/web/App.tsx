@@ -34,6 +34,12 @@ export default function App() {
   const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>('projects');
+  const [highlightedProject, setHighlightedProject] = useState<string | null>(null);
+
+  const handleJumpToProject = (projectName: string) => {
+    setTab('projects');
+    setHighlightedProject(projectName);
+  };
 
   const fetchRegistry = async () => {
     const res = await fetch('/api/projects');
@@ -117,6 +123,8 @@ export default function App() {
           <ProjectList
             projects={registry.projects}
             editingProject={editingProject}
+            highlightedProject={highlightedProject}
+            onClearHighlight={() => setHighlightedProject(null)}
             onEdit={setEditingProject}
             onUpdate={handleUpdate}
             onDelete={handleDelete}
@@ -124,7 +132,7 @@ export default function App() {
         </>
       )}
 
-      {tab === 'analysis' && <AnalysisTab />}
+      {tab === 'analysis' && <AnalysisTab onJumpToProject={handleJumpToProject} />}
     </div>
   );
 }

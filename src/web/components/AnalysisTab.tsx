@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import StalenessBanner from './StalenessBanner';
 import ClusterCard from './ClusterCard';
 import StandalonePatternCard from './StandalonePatternCard';
+import AnalysisToolbar, { type SortMode } from './AnalysisToolbar';
+import ProjectFilterChips from './ProjectFilterChips';
 
 type ClusterMember = { project: string; patternKey: string; summary: string };
 type Cluster = {
@@ -68,12 +70,55 @@ const errorStyle: React.CSSProperties = {
   fontSize: '0.85rem',
 };
 
-export default function AnalysisTab() {
+interface Props {
+  onJumpToProject?: (project: string) => void;
+}
+
+function itemMembers(item: AnalysisItem): ClusterMember[] {
+  return item.kind === 'standalone' ? [item.member] : item.members;
+}
+
+function matchesQuery(item: AnalysisItem, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  if (item.capability.toLowerCase().includes(q)) return true;
+  if (item.description.toLowerCase().includes(q)) return true;
+  for (const m of itemMembers(item)) {
+    if (m.project.toLowerCase().includes(q)) return true;
+    if (m.patternKey.toLowerCase().includes(q)) return true;
+  }
+  return false;
+}
+
+function matchesProjectFilter(item: AnalysisItem, selectedProjects: Set<string>): boolean {
+  if (selectedProjects.size === 0) return true;
+  for (const m of itemMembers(item)) {
+    if (selectedProjects.has(m.project)) return true;
+  }
+  return false;
+}
+
+function compareItems(a: AnalysisItem, b: AnalysisItem, mode: SortMode): number {
+  if (mode === 'alpha') return a.capability.localeCompare(b.capability);
+  if (mode === 'member-count') return itemMembers(b).length - itemMembers(a).length;
+  if (mode === 'consolidation-first') {
+    const aHas = a.kind !== 'standalone' && !!a.consolidationNote;
+    const bHas = b.kind !== 'standalone' && !!b.consolidationNote;
+    if (aHas !== bHas) return aHas ? -1 : 1;
+    return 0;
+  }
+  return 0;
+}
+
+export default function AnalysisTab({ onJumpToProject }: Props) {
   const [data, setData] = useState<AnalysisResponse | null>(null);
   const [emptyPatternProjects, setEmptyPatternProjects] = useState<{ empty: number; total: number }>({ empty: 0, total: 0 });
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rawOutput, setRawOutput] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
+  const [sort, setSort] = useState<SortMode>('default');
 
   const fetchAnalysis = async () => {
     const res = await fetch('/api/analysis');
@@ -122,6 +167,34 @@ export default function AnalysisTab() {
   const stale = data?.stale ?? true;
   const generatedAt = data?.analysis?.generatedAt;
   const clusters = data?.analysis?.clusters ?? [];
+
+  const projectCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of clusters) {
+      for (const m of itemMembers(item)) {
+        counts[m.project] = (counts[m.project] ?? 0) + 1;
+      }
+    }
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [clusters]);
+
+  const visibleClusters = useMemo(() => {
+    const filtered = clusters.filter((item) => matchesQuery(item, query) && matchesProjectFilter(item, selectedProjects));
+    if (sort === 'default') return filtered;
+    return [...filtered].sort((a, b) => compareItems(a, b, sort));
+  }, [clusters, query, selectedProjects, sort]);
+
+  const toggleProject = (name: string) => {
+    setSelectedProjects((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  const clearProjects = () => setSelectedProjects(new Set());
 
   return (
     <div>
@@ -184,15 +257,44 @@ export default function AnalysisTab() {
       )}
 
       {clusters.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-          {clusters.map((item) =>
-            item.kind === 'standalone' ? (
-              <StandalonePatternCard key={`standalone-${item.capability}`} item={item} />
-            ) : (
-              <ClusterCard key={`cluster-${item.capability}`} cluster={item} />
-            ),
+        <>
+          <AnalysisToolbar
+            query={query}
+            onQueryChange={setQuery}
+            sort={sort}
+            onSortChange={setSort}
+            resultCount={visibleClusters.length}
+            totalCount={clusters.length}
+          />
+          <ProjectFilterChips
+            projectCounts={projectCounts}
+            selected={selectedProjects}
+            onToggle={toggleProject}
+            onClear={clearProjects}
+          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+            {visibleClusters.map((item) =>
+              item.kind === 'standalone' ? (
+                <StandalonePatternCard
+                  key={`standalone-${item.capability}`}
+                  item={item}
+                  onMemberClick={onJumpToProject}
+                />
+              ) : (
+                <ClusterCard
+                  key={`cluster-${item.capability}`}
+                  cluster={item}
+                  onMemberClick={onJumpToProject}
+                />
+              ),
+            )}
+          </div>
+          {visibleClusters.length === 0 && (
+            <p style={{ color: '#888', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
+              No clusters match the current filters. Clear search or filter chips to see all.
+            </p>
           )}
-        </div>
+        </>
       )}
 
       {hasAnalysis && clusters.length === 0 && (

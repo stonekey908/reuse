@@ -42,6 +42,8 @@ const memberChipStyle: React.CSSProperties = {
   fontSize: '0.75rem',
   color: '#333',
   border: '1px solid #e6e6e6',
+  cursor: 'pointer',
+  font: 'inherit',
 };
 
 const consolidationStyle: React.CSSProperties = {
@@ -54,7 +56,7 @@ const consolidationStyle: React.CSSProperties = {
   color: '#7a5500',
 };
 
-export default function ClusterCard({ cluster }: { cluster: Cluster }) {
+export default function ClusterCard({ cluster, onMemberClick }: { cluster: Cluster; onMemberClick?: (project: string) => void }) {
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1rem' }}>
@@ -68,11 +70,16 @@ export default function ClusterCard({ cluster }: { cluster: Cluster }) {
       <div style={sectionLabel}>Members</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
         {cluster.members.map((m) => (
-          <span key={`${m.project}::${m.patternKey}`} style={memberChipStyle} title={m.summary}>
+          <button
+            key={`${m.project}::${m.patternKey}`}
+            style={memberChipStyle}
+            title={`${m.summary}\n\nClick to open ${m.project} in Projects tab`}
+            onClick={() => onMemberClick?.(m.project)}
+          >
             <strong style={{ color: '#111' }}>{m.project}</strong>
             <span style={{ color: '#aaa' }}>·</span>
             <span style={{ fontFamily: 'ui-monospace, monospace' }}>{m.patternKey}</span>
-          </span>
+          </button>
         ))}
       </div>
 
