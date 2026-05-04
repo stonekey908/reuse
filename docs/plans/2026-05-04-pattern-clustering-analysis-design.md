@@ -98,3 +98,7 @@ Projects without patterns are invisible to clustering. As of 2026-05-04 all 9 re
 - **JSON parse failures** — one retry with a stricter prompt; second failure surfaces raw output and an "open a bug" prompt.
 - **Cluster name churn across re-runs** — mitigated by seeding prior clusters in the prompt; eval E2 catches if it regresses.
 - **Long pattern sets exceeding `claude -p` context** — currently small (~70 patterns, well under 10KB). Revisit if registry grows past ~50 projects.
+
+## See also
+
+- [`docs/EVALS.md`](../EVALS.md) — eval rubric, how to run, how to iterate on the prompt.
