@@ -1,0 +1,87 @@
+{
+  "clusters": [
+    {
+      "capability": "Document upload",
+      "description": "Patterns for moving binary content from a client to durable storage.",
+      "members": [
+        { "project": "alpha-app", "patternKey": "chunked-file-upload", "summary": "Chunked uploads with retry and progress (mobile)." },
+        { "project": "bravo-platform", "patternKey": "drag-drop-document-uploader", "summary": "Drag-drop dropzone with preview and S3 direct upload (web)." },
+        { "project": "charlie-cli", "patternKey": "streaming-file-upload", "summary": "tus-protocol resumable uploads with backoff (CLI)." },
+        { "project": "delta-mobile", "patternKey": "image-manipulator-pre-upload", "summary": "Resize/compress before Firebase Storage upload (mobile)." }
+      ],
+      "similarities": "All four hand off bytes to remote storage and care about reliability for slow or interrupted networks. They surface progress to the user (chunked progress callback, dropzone thumbnails, image-manipulator stages, tus events).",
+      "differences": "alpha-app and charlie-cli implement chunking/resume themselves; bravo-platform delegates to S3 direct upload; delta-mobile uses Firebase Storage and only does pre-upload size reduction. alpha-app is the only one with a visible queue UI.",
+      "consolidationNote": "alpha-app's chunked uploader and charlie-cli's tus streaming both implement resumable transfers — could share an interface even though the wire protocol differs."
+    },
+    {
+      "capability": "Multi-provider AI routing",
+      "description": "Abstractions for choosing between LLM providers per task or capability.",
+      "members": [
+        { "project": "alpha-app", "patternKey": "multi-provider-ai-router", "summary": "Two-provider routing: Claude vs Gemini based on grounding need." },
+        { "project": "bravo-platform", "patternKey": "anthropic-gemini-ollama-routing", "summary": "Per-job-type routing across three providers with availability pings." },
+        { "project": "charlie-cli", "patternKey": "claude-cli-shell-out", "summary": "claude -p shell-out instead of SDK; single provider but bypass-the-API approach." }
+      ],
+      "similarities": "Each project treats the AI provider as a swappable strategy and isolates provider-specific logic in a single module.",
+      "differences": "alpha-app routes inline at call site; bravo-platform reads model preference from settings per job type; charlie-cli only uses one provider but via subprocess instead of HTTP SDK — different axis of provider abstraction.",
+      "consolidationNote": "alpha-app and bravo-platform's routers could share a Provider interface."
+    },
+    {
+      "capability": "Encrypted storage",
+      "description": "AES-GCM encryption for at-rest data.",
+      "members": [
+        { "project": "alpha-app", "patternKey": "encrypted-local-storage", "summary": "AES-GCM over AsyncStorage with derived keys (mobile)." },
+        { "project": "bravo-platform", "patternKey": "encrypted-postgres-columns", "summary": "AES-GCM on sensitive columns at the application layer (server)." }
+      ],
+      "similarities": "Both use AES-GCM at the application layer rather than relying on transport or DB-level encryption, and both manage their own keys.",
+      "differences": "alpha-app encrypts a key/value local store; bravo-platform encrypts specific Postgres columns selectively.",
+      "consolidationNote": "Could share a small @your-org/aes-gcm helper for envelope encryption."
+    },
+    {
+      "capability": "Haptic feedback",
+      "description": "Wrappers around expo-haptics with semantic names.",
+      "members": [
+        { "project": "alpha-app", "patternKey": "haptic-feedback-abstraction", "summary": "Light/medium/heavy strength helpers." },
+        { "project": "delta-mobile", "patternKey": "haptics-with-presets", "summary": "Named presets — confirm, warn, error." }
+      ],
+      "similarities": "Both wrap expo-haptics behind a domain vocabulary so call sites don't reach for the raw API.",
+      "differences": "alpha-app names by intensity (light/medium/heavy); delta-mobile names by intent (confirm/warn/error). delta-mobile's mapping is more opinionated."
+    },
+    {
+      "capability": "Background task lifecycle",
+      "description": "Long-running task UI lifecycle with progress.",
+      "members": [
+        { "project": "bravo-platform", "patternKey": "background-task-provider", "summary": "React context with topbar progress beacon and cross-route persistence." }
+      ],
+      "similarities": "Single-member cluster — only bravo-platform exposes an explicit background task lifecycle to the UI.",
+      "differences": "n/a"
+    },
+    {
+      "capability": "CLI ergonomics",
+      "description": "CLI command and arg-parsing conventions.",
+      "members": [
+        { "project": "charlie-cli", "patternKey": "kebab-case-cli-arg-parser", "summary": "commander-based parser converting kebab-case to camelCase." },
+        { "project": "echo-design-system", "patternKey": "shadcn-style-cli-distribution", "summary": "init + add commands that generate copy-paste components into the consumer repo." }
+      ],
+      "similarities": "Both treat the CLI as a code-generation surface, not just a runner — kebab-case args map to internal call sites in one, copy-paste component output in the other.",
+      "differences": "echo-design-system's CLI emits files into the consumer; charlie-cli's runs to completion and exits."
+    },
+    {
+      "capability": "OCR",
+      "description": "Optical character recognition pipelines.",
+      "members": [
+        { "project": "delta-mobile", "patternKey": "single-provider-gemini-ocr", "summary": "Direct Gemini OCR call via Cloud Functions." }
+      ],
+      "similarities": "Single-member cluster.",
+      "differences": "n/a"
+    },
+    {
+      "capability": "Theming",
+      "description": "Design tokens and runtime theme switching.",
+      "members": [
+        { "project": "echo-design-system", "patternKey": "theme-tokens-with-presets", "summary": "Five preset palettes + three densities switchable at runtime." }
+      ],
+      "similarities": "Single-member cluster.",
+      "differences": "n/a"
+    }
+  ]
+}
