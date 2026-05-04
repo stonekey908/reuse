@@ -7,7 +7,7 @@ export const ProjectSchema = z.object({
   patterns: z.record(z.string(), z.string()).optional().default({}).describe('Named patterns with descriptions'),
   git: z.string().optional().describe('Git remote URL'),
   links: z.record(z.string(), z.string()).optional().default({}).describe('External links (linear, figma, notion, etc.)'),
-});
+}).passthrough();
 
 export const ClusterMemberSchema = z.object({
   project: z.string().describe('Project name as registered'),
@@ -42,12 +42,12 @@ export const AnalysisSchema = z.object({
   registryFingerprint: z.string().describe('sha256 of canonical patterns JSON at generation time'),
   projectFingerprints: z.record(z.string(), z.string()).describe('Per-project pattern fingerprints — used to compute changed-projects diff on staleness check'),
   clusters: z.array(AnalysisItemSchema).describe('Mixed array of multi-member clusters and standalone patterns'),
-});
+}).passthrough();
 
 export const RegistrySchema = z.object({
   projects: z.record(z.string(), ProjectSchema),
   analysis: AnalysisSchema.optional().describe('Cached cross-project pattern clustering analysis'),
-});
+}).passthrough();
 
 export type Project = z.infer<typeof ProjectSchema>;
 export type Registry = z.infer<typeof RegistrySchema>;
