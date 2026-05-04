@@ -125,7 +125,7 @@ export default function AnalysisTab() {
           disabled={running}
           style={running ? disabledButtonStyle : buttonStyle}
         >
-          {running ? 'Running… ~10–15s' : hasAnalysis ? 'Re-run analysis' : 'Run analysis'}
+          {running ? 'Running… ~30–90s' : hasAnalysis ? 'Re-run analysis' : 'Run analysis'}
         </button>
       </div>
 

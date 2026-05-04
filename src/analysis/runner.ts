@@ -22,7 +22,7 @@ export type ClaudeRunner = (prompt: string) => Promise<string>;
 
 export const defaultClaudeRunner: ClaudeRunner = (prompt) => {
   return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-p'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn('claude', ['-p', prompt], { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
 
@@ -48,9 +48,6 @@ export const defaultClaudeRunner: ClaudeRunner = (prompt) => {
       }
       resolve(stdout);
     });
-
-    child.stdin.write(prompt);
-    child.stdin.end();
   });
 };
 
