@@ -24,9 +24,16 @@ export class JsonParseError extends Error {
 
 export type ClaudeRunner = (prompt: string) => Promise<string>;
 
+/**
+ * Model used by `claude -p` for analysis. Defaults to sonnet — clustering is
+ * a structured-output task, doesn't need Opus-level reasoning, and Opus is
+ * 3-5x slower for this prompt size. Override with REUSE_CLAUDE_MODEL.
+ */
+const CLAUDE_MODEL = process.env.REUSE_CLAUDE_MODEL || 'sonnet';
+
 export const defaultClaudeRunner: ClaudeRunner = (prompt) => {
   return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-p', prompt], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn('claude', ['-p', '--model', CLAUDE_MODEL, prompt], { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
 
