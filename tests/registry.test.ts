@@ -50,6 +50,37 @@ describe('Registry Types', () => {
     const registry = { projects: {} };
     expect(RegistrySchema.safeParse(registry).success).toBe(true);
   });
+
+  it('validates a registry without an analysis field (no migration needed)', () => {
+    const registry = {
+      projects: {
+        foo: { path: '/tmp/foo', patterns: { auth: 'JWT' } },
+      },
+    };
+    expect(RegistrySchema.safeParse(registry).success).toBe(true);
+  });
+
+  it('validates a registry with a populated analysis field', () => {
+    const registry = {
+      projects: {
+        foo: { path: '/tmp/foo', patterns: { auth: 'JWT' } },
+      },
+      analysis: {
+        generatedAt: '2026-05-04T12:00:00.000Z',
+        registryFingerprint: 'a'.repeat(64),
+        clusters: [
+          {
+            capability: 'Authentication',
+            description: 'Auth flows across projects',
+            members: [{ project: 'foo', patternKey: 'auth', summary: 'JWT' }],
+            similarities: 'Both use tokens.',
+            differences: 'One is JWT, other is session.',
+          },
+        ],
+      },
+    };
+    expect(RegistrySchema.safeParse(registry).success).toBe(true);
+  });
 });
 
 describe('Registry Read/Write', () => {
