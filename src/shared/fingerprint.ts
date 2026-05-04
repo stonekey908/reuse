@@ -1,22 +1,26 @@
 import { createHash } from 'crypto';
-import type { Registry } from './types.js';
+import type { Project, Registry } from './types.js';
 
-function canonicalize(registry: Registry): string {
-  const projectNames = Object.keys(registry.projects).sort();
-  const canonical: Record<string, Record<string, string>> = {};
-  for (const name of projectNames) {
-    const project = registry.projects[name];
-    const patterns = project.patterns ?? {};
-    const patternKeys = Object.keys(patterns).sort();
-    const sortedPatterns: Record<string, string> = {};
-    for (const key of patternKeys) {
-      sortedPatterns[key] = patterns[key];
-    }
-    canonical[name] = sortedPatterns;
+function sortedPatterns(project: Project): Record<string, string> {
+  const patterns = project.patterns ?? {};
+  const sortedKeys = Object.keys(patterns).sort();
+  const out: Record<string, string> = {};
+  for (const key of sortedKeys) out[key] = patterns[key];
+  return out;
+}
+
+export function computeProjectFingerprint(project: Project): string {
+  return createHash('sha256').update(JSON.stringify(sortedPatterns(project))).digest('hex');
+}
+
+export function computeProjectFingerprints(registry: Registry): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const name of Object.keys(registry.projects).sort()) {
+    out[name] = computeProjectFingerprint(registry.projects[name]);
   }
-  return JSON.stringify(canonical);
+  return out;
 }
 
 export function computeRegistryFingerprint(registry: Registry): string {
-  return createHash('sha256').update(canonicalize(registry)).digest('hex');
+  return createHash('sha256').update(JSON.stringify(computeProjectFingerprints(registry))).digest('hex');
 }

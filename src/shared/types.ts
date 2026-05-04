@@ -27,6 +27,7 @@ export const ClusterSchema = z.object({
 export const AnalysisSchema = z.object({
   generatedAt: z.string().describe('ISO timestamp of when this analysis was generated'),
   registryFingerprint: z.string().describe('sha256 of canonical patterns JSON at generation time'),
+  projectFingerprints: z.record(z.string(), z.string()).describe('Per-project pattern fingerprints — used to compute changed-projects diff on staleness check'),
   clusters: z.array(ClusterSchema),
 });
 

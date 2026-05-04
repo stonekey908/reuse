@@ -68,6 +68,7 @@ describe('Registry Types', () => {
       analysis: {
         generatedAt: '2026-05-04T12:00:00.000Z',
         registryFingerprint: 'a'.repeat(64),
+        projectFingerprints: { foo: 'b'.repeat(64) },
         clusters: [
           {
             capability: 'Authentication',
