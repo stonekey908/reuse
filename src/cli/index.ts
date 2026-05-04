@@ -254,16 +254,29 @@ function runChild(command: string, args: string[], env?: NodeJS.ProcessEnv): Pro
 
 program
   .command('eval')
-  .description('Run the clustering eval (E1 snapshot by default; --quality for E2 LLM-as-judge)')
-  .option('-q, --quality', 'Run the E2 LLM-as-judge eval (slower; writes a markdown report to eval-results/)')
-  .action(async (opts: { quality?: boolean }) => {
+  .description('Run an eval. Default: clustering snapshot (E1). Flags: --quality for cluster judge (E2), --extract for extract_patterns scout snapshot, --extract --quality for extract judge.')
+  .option('-q, --quality', 'Run the LLM-as-judge eval (slower; writes a markdown report to eval-results/)')
+  .option('-e, --extract', 'Eval the extract_patterns scout instead of the clustering analysis')
+  .action(async (opts: { quality?: boolean; extract?: boolean }) => {
+    if (opts.extract && opts.quality) {
+      console.log('\n  Running extract_patterns LLM-as-judge eval — invokes claude -p twice (extraction + judge), expect ~1-2 min.\n');
+      const code = await runChild('npm', ['run', 'eval:extract']);
+      process.exit(code);
+      return;
+    }
+    if (opts.extract) {
+      console.log('\n  Running extract_patterns scout snapshot (deterministic, fast)…\n');
+      const code = await runChild('npx', ['vitest', 'run', 'tests/analysis/scout.test.ts']);
+      process.exit(code);
+      return;
+    }
     if (opts.quality) {
-      console.log('\n  Running E2 LLM-as-judge eval — this invokes claude -p twice (analysis + judge), expect ~2-3 min total.\n');
+      console.log('\n  Running clustering LLM-as-judge eval — invokes claude -p twice (analysis + judge), expect ~2-3 min total.\n');
       const code = await runChild('npm', ['run', 'eval:quality']);
       process.exit(code);
       return;
     }
-    console.log('\n  Running E1 snapshot eval against the fixture (real claude -p, ~30-90s)…\n');
+    console.log('\n  Running clustering snapshot eval against the fixture (real claude -p, ~30-90s)…\n');
     const code = await runChild('npx', ['vitest', 'run', 'tests/analysis/snapshot.test.ts'], { RUN_LLM_EVALS: '1' });
     process.exit(code);
   });

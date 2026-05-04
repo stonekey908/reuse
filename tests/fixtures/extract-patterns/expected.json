@@ -1,0 +1,31 @@
+{
+  "expectedModules": [
+    {
+      "name": "apps/web",
+      "fileFragment": "apps/web/src/page",
+      "concern": "Next.js streaming server component"
+    },
+    {
+      "name": "apps/cli",
+      "fileFragment": "apps/cli/bin/cli",
+      "concern": "ESM CLI binary that boots a local web app"
+    },
+    {
+      "name": "packages/mcp-server",
+      "fileFragment": "packages/mcp-server/src/index",
+      "concern": "Bundled MCP server"
+    },
+    {
+      "name": "packages/shared",
+      "fileFragment": "packages/shared/src/index",
+      "concern": "Shared types"
+    },
+    {
+      "name": "packages/watcher",
+      "fileFragment": "packages/watcher/src/index",
+      "concern": "Gitignore-aware chokidar file watcher"
+    }
+  ],
+  "expectedReadmeKeywords": ["sample-monorepo", "Turborepo"],
+  "expectedPackageJsonKeys": ["workspaces", "scripts"]
+}
