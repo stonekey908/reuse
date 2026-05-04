@@ -82,6 +82,60 @@ describe('Registry Types', () => {
     };
     expect(RegistrySchema.safeParse(registry).success).toBe(true);
   });
+
+  it('validates an analysis with a mix of cluster and standalone items', () => {
+    const registry = {
+      projects: { foo: { path: '/tmp/foo', patterns: { a: 'A', b: 'B' } } },
+      analysis: {
+        generatedAt: '2026-05-04T12:00:00.000Z',
+        registryFingerprint: 'a'.repeat(64),
+        projectFingerprints: { foo: 'b'.repeat(64) },
+        clusters: [
+          {
+            kind: 'cluster',
+            capability: 'Multi A',
+            description: 'two of a thing',
+            members: [
+              { project: 'foo', patternKey: 'a', summary: 'one' },
+              { project: 'foo', patternKey: 'b', summary: 'two' },
+            ],
+            similarities: 'similar',
+            differences: 'different',
+          },
+          {
+            kind: 'standalone',
+            capability: 'Lonely',
+            description: 'one of a kind',
+            member: { project: 'foo', patternKey: 'a', summary: 'lonely' },
+            rationale: 'no peers',
+            closestRelative: 'no relatives in registry',
+          },
+        ],
+      },
+    };
+    expect(RegistrySchema.safeParse(registry).success).toBe(true);
+  });
+
+  it('rejects a standalone item missing rationale or closestRelative', () => {
+    const registry = {
+      projects: { foo: { path: '/tmp/foo' } },
+      analysis: {
+        generatedAt: '2026-05-04T12:00:00.000Z',
+        registryFingerprint: 'a'.repeat(64),
+        projectFingerprints: {},
+        clusters: [
+          {
+            kind: 'standalone',
+            capability: 'X',
+            description: 'x',
+            member: { project: 'foo', patternKey: 'a', summary: 's' },
+            // missing rationale + closestRelative
+          },
+        ],
+      },
+    };
+    expect(RegistrySchema.safeParse(registry).success).toBe(false);
+  });
 });
 
 describe('Registry Read/Write', () => {

@@ -1,6 +1,10 @@
 import { spawn } from 'child_process';
 import { z } from 'zod';
-import { ClusterSchema, type Cluster, type Registry } from '../shared/types.js';
+import {
+  AnalysisItemSchema,
+  type AnalysisItem,
+  type Registry,
+} from '../shared/types.js';
 import { buildPrompt, collectPatterns } from './prompt.js';
 
 export class ClaudeNotFoundError extends Error {
@@ -60,11 +64,11 @@ export function stripCodeFences(text: string): string {
 }
 
 const ResponseShapeSchema = z.union([
-  z.object({ clusters: z.array(ClusterSchema) }),
-  z.array(ClusterSchema),
+  z.object({ clusters: z.array(AnalysisItemSchema) }),
+  z.array(AnalysisItemSchema),
 ]);
 
-export function parseClusters(raw: string): Cluster[] {
+export function parseClusters(raw: string): AnalysisItem[] {
   const cleaned = stripCodeFences(raw);
   const parsed = JSON.parse(cleaned);
   const validated = ResponseShapeSchema.parse(parsed);
@@ -77,7 +81,7 @@ export async function runAnalysis({
 }: {
   registry: Registry;
   runner?: ClaudeRunner;
-}): Promise<Cluster[]> {
+}): Promise<AnalysisItem[]> {
   const priorClusters = registry.analysis?.clusters;
   const patterns = collectPatterns(registry);
 
