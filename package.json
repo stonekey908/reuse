@@ -13,7 +13,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "eval:quality": "npm run build:server && node scripts/eval-quality.js"
+    "eval:quality": "npm run build:server && node scripts/eval-quality.js",
+    "eval:extract": "npm run build:server && node scripts/eval-extract.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
