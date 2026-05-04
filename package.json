@@ -12,7 +12,8 @@
     "dev": "vite",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval:quality": "npm run build:server && node scripts/eval-quality.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

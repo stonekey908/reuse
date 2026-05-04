@@ -1,18 +1,31 @@
-import express from 'express';
+import express, { type Express } from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { loadRegistry, saveRegistry } from '../shared/registry.js';
 import { searchProjects } from '../shared/search.js';
+import { getStaleness, writeAnalysis } from '../analysis/cache.js';
+import {
+  ClaudeNotFoundError,
+  JsonParseError,
+  defaultClaudeRunner,
+  runAnalysis,
+  type ClaudeRunner,
+} from '../analysis/runner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export function startServer(port: number) {
+export type CreateAppOptions = {
+  runner?: ClaudeRunner;
+  serveStatic?: boolean;
+};
+
+export function createApp(options: CreateAppOptions = {}): Express {
+  const { runner = defaultClaudeRunner, serveStatic = true } = options;
   const app = express();
   app.use(cors());
   app.use(express.json());
 
-  // API routes
   app.get('/api/projects', (_req, res) => {
     const registry = loadRegistry();
     res.json(registry);
@@ -77,13 +90,70 @@ export function startServer(port: number) {
     res.json(results);
   });
 
-  // Serve static frontend (built Vite output)
-  const staticDir = path.resolve(__dirname, '../../dist-web');
-  app.use(express.static(staticDir));
-  app.get('{*path}', (_req, res) => {
-    res.sendFile(path.join(staticDir, 'index.html'));
+  app.get('/api/analysis', (_req, res) => {
+    const registry = loadRegistry();
+    const staleness = getStaleness(registry);
+    res.json({
+      analysis: registry.analysis ?? null,
+      stale: staleness.stale,
+      changedProjects: staleness.changedProjects,
+    });
   });
 
+  app.post('/api/analysis/run', async (_req, res) => {
+    const started = Date.now();
+    try {
+      const registry = loadRegistry();
+      const patternCount = Object.values(registry.projects).reduce(
+        (sum, p) => sum + Object.keys(p.patterns ?? {}).length,
+        0,
+      );
+      console.log(`[analysis] starting run — ${patternCount} patterns across ${Object.keys(registry.projects).length} projects (typically 3–6 min)`);
+      const clusters = await runAnalysis({ registry, runner });
+      const updated = writeAnalysis(registry, clusters);
+      const staleness = getStaleness(updated);
+      console.log(`[analysis] done in ${Math.round((Date.now() - started) / 1000)}s — ${clusters.length} clusters`);
+      res.json({
+        analysis: updated.analysis,
+        stale: staleness.stale,
+        changedProjects: staleness.changedProjects,
+      });
+    } catch (err) {
+      console.log(`[analysis] failed after ${Math.round((Date.now() - started) / 1000)}s — ${err instanceof Error ? err.message : String(err)}`);
+      if (err instanceof ClaudeNotFoundError) {
+        res.status(500).json({
+          error: err.message,
+          code: 'CLAUDE_NOT_FOUND',
+          hint: 'Install Claude Code CLI from https://claude.com/claude-code and ensure `claude` is on your PATH.',
+        });
+        return;
+      }
+      if (err instanceof JsonParseError) {
+        res.status(502).json({
+          error: err.message,
+          code: 'JSON_PARSE_FAILED',
+          rawOutput: err.rawOutput,
+        });
+        return;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message, code: 'ANALYSIS_FAILED' });
+    }
+  });
+
+  if (serveStatic) {
+    const staticDir = path.resolve(__dirname, '../../dist-web');
+    app.use(express.static(staticDir));
+    app.get('{*path}', (_req, res) => {
+      res.sendFile(path.join(staticDir, 'index.html'));
+    });
+  }
+
+  return app;
+}
+
+export function startServer(port: number) {
+  const app = createApp();
   app.listen(port, () => {
     console.log(`\n  Reuse registry UI running at http://localhost:${port}\n`);
   });
