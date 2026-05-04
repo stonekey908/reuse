@@ -49,9 +49,12 @@ ${patternsList}
 Rules:
 - Each pattern joins exactly one cluster.
 - Reuse a previous cluster name when the meaning still applies. Drop clusters that no longer have members.
-- A cluster with a single member is fine if no other pattern fits.
-- "similarities" and "differences" must be substantive prose — not boilerplate like "they are similar". If members truly differ only in surface detail, say so.
-- "consolidationNote" is optional. Only include it when there is a real, concrete reuse suggestion (e.g. "extract X into a shared package").
+- **Aim for HIGH-LEVEL capability names, not strategy names.** Cluster names must be the problem domain ("Document upload", "AI provider integration", "Encryption", "CLI tooling conventions") — never an implementation strategy or a single project's specific approach. Implementation specifics (kebab-case, AES-GCM, tus, chunked, claude -p) belong in member summaries and the differences section, NOT in the cluster header.
+- **Strategy diversity is a STRENGTH of a cluster, not a reason to split.** When members address the same problem via different strategies (multi-provider routing vs CLI shell-out vs single-provider direct call), they belong in the SAME cluster — that's exactly the consolidation insight the developer wants. Spell out the divergent strategies in the differences field. Splitting strategies into separate clusters destroys the comparison.
+- **Don't force unrelated patterns together.** A cluster must reflect a genuine shared capability, not a vague umbrella. If consolidating two patterns requires you to write "skip — divergence is fundamental" in the consolidationNote, they belong in separate clusters. Singletons are fine when justified.
+- "similarities" and "differences" must be substantive prose — at least two sentences each — citing concrete shared mechanisms or concrete divergences. Never write "they are similar" or "Single member." placeholders.
+- For genuine singletons: write similarities as a one-sentence rationale ("what makes this pattern its own category") and differences as a one-sentence note on what the closest related pattern in the registry is and why it doesn't fit.
+- "consolidationNote" is optional. Include it ONLY when there is a concrete reuse suggestion. End every consolidationNote with a parenthetical effort/payoff judgment: "(low effort, high reuse)", "(medium effort, medium reuse)", or "(skip — divergence is fundamental)". When relevant, name the proposed API surface (e.g. an "upload(stream, opts) → progress events" function shape).
 
 Return strict JSON matching exactly this shape:
 {
