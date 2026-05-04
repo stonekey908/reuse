@@ -1,0 +1,12 @@
+{
+  "name": "sample-cli",
+  "version": "0.1.0",
+  "bin": {
+    "sample": "./bin/cli.mjs"
+  },
+  "dependencies": {
+    "@sample/shared": "workspace:*",
+    "@sample/watcher": "workspace:*",
+    "open": "^10.0.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@sample/mcp-server",
+  "version": "0.1.0",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@sample/shared": "workspace:*",
+    "zod": "^3.24.0"
+  }
+}
