@@ -101,17 +101,25 @@ export function createApp(options: CreateAppOptions = {}): Express {
   });
 
   app.post('/api/analysis/run', async (_req, res) => {
+    const started = Date.now();
     try {
       const registry = loadRegistry();
+      const patternCount = Object.values(registry.projects).reduce(
+        (sum, p) => sum + Object.keys(p.patterns ?? {}).length,
+        0,
+      );
+      console.log(`[analysis] starting run — ${patternCount} patterns across ${Object.keys(registry.projects).length} projects (typically 3–6 min)`);
       const clusters = await runAnalysis({ registry, runner });
       const updated = writeAnalysis(registry, clusters);
       const staleness = getStaleness(updated);
+      console.log(`[analysis] done in ${Math.round((Date.now() - started) / 1000)}s — ${clusters.length} clusters`);
       res.json({
         analysis: updated.analysis,
         stale: staleness.stale,
         changedProjects: staleness.changedProjects,
       });
     } catch (err) {
+      console.log(`[analysis] failed after ${Math.round((Date.now() - started) / 1000)}s — ${err instanceof Error ? err.message : String(err)}`);
       if (err instanceof ClaudeNotFoundError) {
         res.status(500).json({
           error: err.message,
