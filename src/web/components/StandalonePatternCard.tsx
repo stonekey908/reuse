@@ -43,6 +43,8 @@ const memberChipStyle: React.CSSProperties = {
   fontSize: '0.75rem',
   color: '#333',
   border: '1px solid #e6e6e6',
+  cursor: 'pointer',
+  font: 'inherit',
 };
 
 const standaloneBadgeStyle: React.CSSProperties = {
@@ -56,7 +58,7 @@ const standaloneBadgeStyle: React.CSSProperties = {
   borderRadius: 4,
 };
 
-export default function StandalonePatternCard({ item }: { item: StandalonePattern }) {
+export default function StandalonePatternCard({ item, onMemberClick }: { item: StandalonePattern; onMemberClick?: (project: string) => void }) {
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1rem' }}>
@@ -66,11 +68,15 @@ export default function StandalonePatternCard({ item }: { item: StandalonePatter
       <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.825rem' }}>{item.description}</p>
 
       <div style={sectionLabel}>Pattern</div>
-      <span style={memberChipStyle} title={item.member.summary}>
+      <button
+        style={memberChipStyle}
+        title={`${item.member.summary}\n\nClick to open ${item.member.project} in Projects tab`}
+        onClick={() => onMemberClick?.(item.member.project)}
+      >
         <strong style={{ color: '#111' }}>{item.member.project}</strong>
         <span style={{ color: '#aaa' }}>·</span>
         <span style={{ fontFamily: 'ui-monospace, monospace' }}>{item.member.patternKey}</span>
-      </span>
+      </button>
 
       <div style={sectionLabel}>Rationale</div>
       <p style={{ margin: 0, fontSize: '0.825rem', color: '#444', lineHeight: 1.5 }}>{item.rationale}</p>
