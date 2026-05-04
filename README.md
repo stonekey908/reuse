@@ -295,7 +295,26 @@ Run `reuse serve` and open `http://localhost:3210`.
 - Add new projects with the form
 - Edit any field — path, description, tags, git URL, patterns, links
 - Remove projects
+- The **Analysis** tab clusters patterns across the whole registry by capability and shows a staleness banner when projects change after the last run
 - All changes write to the same registry file used by the CLI and MCP
+
+## Analysis & Evals
+
+Reuse can cluster patterns across all your registered projects by capability and surface consolidation opportunities. The analysis runs `claude -p` once with all your patterns inline (no API key needed — uses your logged-in Claude Code CLI). Results are cached to the registry; re-run when patterns change.
+
+```bash
+# Analysis
+reuse analyze              # cached if fresh, otherwise runs (3-6 min on a full registry)
+reuse analyze --refresh    # force a re-run
+
+# Evals (keep the clustering output's quality honest)
+reuse eval                 # E1 — snapshot test against a fixture, real claude -p
+reuse eval --quality       # E2 — LLM-as-judge, writes a markdown report to eval-results/
+```
+
+Or invoke from any Claude Code session via the `analyze_patterns` MCP tool (same registry slot — runs from MCP and from the web UI are interchangeable).
+
+See [`docs/EVALS.md`](docs/EVALS.md) for the rubric, how to read judge reports, and prompt-tuning workflow.
 
 ## How It Works
 

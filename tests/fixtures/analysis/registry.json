@@ -1,0 +1,60 @@
+{
+  "projects": {
+    "alpha-app": {
+      "path": "/fixture/alpha-app",
+      "description": "React Native app with file upload and AI chat.",
+      "tags": ["react-native", "mobile"],
+      "patterns": {
+        "chunked-file-upload": "Visible upload queue with retry, progress callback, and 2MB chunks (/src/upload/chunked.ts).",
+        "multi-provider-ai-router": "Routes prompts between Claude and Gemini based on grounding requirement (/src/ai/router.ts).",
+        "encrypted-local-storage": "AES-GCM encryption layer over AsyncStorage with key derivation (/src/lib/crypto.ts).",
+        "haptic-feedback-abstraction": "Light/medium/heavy haptic helpers wrapping expo-haptics (/src/lib/haptics.ts)."
+      },
+      "links": {}
+    },
+    "bravo-platform": {
+      "path": "/fixture/bravo-platform",
+      "description": "Next.js platform with AI agents and document ingestion.",
+      "tags": ["next.js", "ai"],
+      "patterns": {
+        "drag-drop-document-uploader": "Multi-file drag-drop dropzone with preview thumbnails and S3 direct upload (/src/components/Uploader.tsx).",
+        "anthropic-gemini-ollama-routing": "Per-job-type model selection across Anthropic, Gemini, Ollama with availability pings (/src/lib/ai/route.ts).",
+        "encrypted-postgres-columns": "Application-side AES-GCM encryption on sensitive Postgres columns (/src/db/encrypt.ts).",
+        "background-task-provider": "Long-running task lifecycle exposed to UI via React context with progress beacon (/src/components/BackgroundTaskProvider.tsx)."
+      },
+      "links": {}
+    },
+    "charlie-cli": {
+      "path": "/fixture/charlie-cli",
+      "description": "TypeScript CLI tool for content ingestion.",
+      "tags": ["cli", "typescript"],
+      "patterns": {
+        "streaming-file-upload": "tus-protocol resumable uploads with backoff retry (/src/upload/tus.ts).",
+        "claude-cli-shell-out": "Shells out to `claude -p` via child_process.spawn instead of using the SDK (/src/ai/claude.ts).",
+        "kebab-case-cli-arg-parser": "Custom commander-based parser converting --foo-bar to fooBar at call site (/src/cli/args.ts)."
+      },
+      "links": {}
+    },
+    "delta-mobile": {
+      "path": "/fixture/delta-mobile",
+      "description": "Expo mobile app with OCR.",
+      "tags": ["react-native", "expo"],
+      "patterns": {
+        "single-provider-gemini-ocr": "Direct Gemini OCR via Cloud Functions proxy (/src/ai/ocr.ts).",
+        "image-manipulator-pre-upload": "Resize and compress images before Firebase Storage upload (/src/lib/upload.ts).",
+        "haptics-with-presets": "Expo haptics wrapped with named presets — confirm, warn, error (/src/lib/haptics.ts)."
+      },
+      "links": {}
+    },
+    "echo-design-system": {
+      "path": "/fixture/echo-design-system",
+      "description": "Design system / component library.",
+      "tags": ["design-system"],
+      "patterns": {
+        "shadcn-style-cli-distribution": "init + add commands generate copy-paste components into the consumer (/cli/src/index.ts).",
+        "theme-tokens-with-presets": "Five preset palettes + three densities switchable at runtime (/src/theme/tokens.ts)."
+      },
+      "links": {}
+    }
+  }
+}

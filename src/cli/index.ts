@@ -3,8 +3,16 @@
 import { Command } from 'commander';
 import * as path from 'path';
 import * as fs from 'fs';
+import { spawn } from 'child_process';
 import { loadRegistry, saveRegistry } from '../shared/registry.js';
 import { searchProjects } from '../shared/search.js';
+import { getStaleness, writeAnalysis } from '../analysis/cache.js';
+import {
+  ClaudeNotFoundError,
+  JsonParseError,
+  runAnalysis,
+} from '../analysis/runner.js';
+import type { Analysis, Cluster } from '../shared/types.js';
 
 const program = new Command();
 
@@ -153,6 +161,98 @@ program
   .action(async (opts: { port: string }) => {
     const { startServer } = await import('./serve.js');
     startServer(parseInt(opts.port, 10));
+  });
+
+// ─── Analysis & Evals ───
+
+function printAnalysis(analysis: Analysis, source: 'cached' | 'fresh'): void {
+  console.log();
+  console.log(`  ${analysis.clusters.length} cluster${analysis.clusters.length === 1 ? '' : 's'}  ·  ${source}  ·  generated ${analysis.generatedAt}`);
+  console.log();
+  for (const cluster of analysis.clusters) {
+    printCluster(cluster);
+  }
+}
+
+function printCluster(cluster: Cluster): void {
+  console.log(`  ▍ ${cluster.capability}  (${cluster.members.length} ${cluster.members.length === 1 ? 'pattern' : 'patterns'})`);
+  console.log(`     ${cluster.description}`);
+  for (const m of cluster.members) {
+    console.log(`       · ${m.project}/${m.patternKey}  —  ${m.summary}`);
+  }
+  console.log(`     Similarities: ${cluster.similarities}`);
+  console.log(`     Differences:  ${cluster.differences}`);
+  if (cluster.consolidationNote) {
+    console.log(`     → Consolidate: ${cluster.consolidationNote}`);
+  }
+  console.log();
+}
+
+program
+  .command('analyze')
+  .description('Cluster patterns across all registered projects (cached; uses claude -p)')
+  .option('-r, --refresh', 'Force a re-run even if the cached analysis is fresh')
+  .action(async (opts: { refresh?: boolean }) => {
+    try {
+      const registry = loadRegistry();
+      const staleness = getStaleness(registry);
+      const useCache = !opts.refresh && registry.analysis && !staleness.stale;
+
+      if (useCache) {
+        printAnalysis(registry.analysis!, 'cached');
+        return;
+      }
+
+      const patternCount = Object.values(registry.projects).reduce(
+        (sum, p) => sum + Object.keys(p.patterns ?? {}).length,
+        0,
+      );
+      const projectCount = Object.keys(registry.projects).length;
+      console.log(`\n  Running clustering analysis on ${patternCount} patterns across ${projectCount} projects (typically 3–6 min for the full registry)…\n`);
+
+      const clusters = await runAnalysis({ registry });
+      const updated = writeAnalysis(registry, clusters);
+      printAnalysis(updated.analysis!, 'fresh');
+    } catch (err) {
+      if (err instanceof ClaudeNotFoundError) {
+        console.error(`\n  ${err.message}\n`);
+        process.exit(2);
+      }
+      if (err instanceof JsonParseError) {
+        console.error(`\n  ${err.message}`);
+        console.error(`\n  Raw output (first 500 chars):\n${err.rawOutput.slice(0, 500)}\n`);
+        process.exit(3);
+      }
+      console.error(`\n  analyze failed: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
+    }
+  });
+
+function runChild(command: string, args: string[], env?: NodeJS.ProcessEnv): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: 'inherit',
+      env: env ? { ...process.env, ...env } : process.env,
+    });
+    child.on('error', reject);
+    child.on('close', (code) => resolve(code ?? 1));
+  });
+}
+
+program
+  .command('eval')
+  .description('Run the clustering eval (E1 snapshot by default; --quality for E2 LLM-as-judge)')
+  .option('-q, --quality', 'Run the E2 LLM-as-judge eval (slower; writes a markdown report to eval-results/)')
+  .action(async (opts: { quality?: boolean }) => {
+    if (opts.quality) {
+      console.log('\n  Running E2 LLM-as-judge eval — this invokes claude -p twice (analysis + judge), expect ~2-3 min total.\n');
+      const code = await runChild('npm', ['run', 'eval:quality']);
+      process.exit(code);
+      return;
+    }
+    console.log('\n  Running E1 snapshot eval against the fixture (real claude -p, ~30-90s)…\n');
+    const code = await runChild('npx', ['vitest', 'run', 'tests/analysis/snapshot.test.ts'], { RUN_LLM_EVALS: '1' });
+    process.exit(code);
   });
 
 program.parse();

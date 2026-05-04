@@ -1,0 +1,37 @@
+{
+  "clusters": [
+    {
+      "capabilityKeywords": ["upload", "file", "document", "ingest"],
+      "minMembers": 3,
+      "requiredMembers": [
+        { "project": "alpha-app", "patternKey": "chunked-file-upload" },
+        { "project": "bravo-platform", "patternKey": "drag-drop-document-uploader" },
+        { "project": "charlie-cli", "patternKey": "streaming-file-upload" }
+      ]
+    },
+    {
+      "capabilityKeywords": ["multi-provider", "provider", "ai", "llm", "model", "routing"],
+      "minMembers": 2,
+      "requiredMembers": [
+        { "project": "alpha-app", "patternKey": "multi-provider-ai-router" },
+        { "project": "bravo-platform", "patternKey": "anthropic-gemini-ollama-routing" }
+      ]
+    },
+    {
+      "capabilityKeywords": ["encrypt", "encryption", "crypto", "aes"],
+      "minMembers": 2,
+      "requiredMembers": [
+        { "project": "alpha-app", "patternKey": "encrypted-local-storage" },
+        { "project": "bravo-platform", "patternKey": "encrypted-postgres-columns" }
+      ]
+    },
+    {
+      "capabilityKeywords": ["haptic", "feedback"],
+      "minMembers": 2,
+      "requiredMembers": [
+        { "project": "alpha-app", "patternKey": "haptic-feedback-abstraction" },
+        { "project": "delta-mobile", "patternKey": "haptics-with-presets" }
+      ]
+    }
+  ]
+}

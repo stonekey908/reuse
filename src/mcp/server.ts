@@ -2,10 +2,22 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { loadRegistry, saveRegistry } from '../shared/registry.js';
 import { searchProjects } from '../shared/search.js';
+import { getStaleness, writeAnalysis } from '../analysis/cache.js';
+import {
+  ClaudeNotFoundError,
+  JsonParseError,
+  defaultClaudeRunner,
+  runAnalysis,
+  type ClaudeRunner,
+} from '../analysis/runner.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execSync, spawnSync } from 'child_process';
+
+export type CreateReuseServerOptions = {
+  runner?: ClaudeRunner;
+};
 
 function findRipgrep(): string | null {
   // Check common locations
@@ -67,7 +79,8 @@ function grepFallback(projectPath: string, pattern: string, fileGlob?: string): 
   return results.join('\n');
 }
 
-export function createReuseServer(): McpServer {
+export function createReuseServer(options: CreateReuseServerOptions = {}): McpServer {
+  const { runner = defaultClaudeRunner } = options;
   const server = new McpServer({
     name: 'reuse',
     version: '0.2.0',
@@ -658,6 +671,77 @@ export function createReuseServer(): McpServer {
         };
       } catch {
         return { content: [{ type: 'text' as const, text: 'Search timed out or failed.' }] };
+      }
+    }
+  );
+
+  server.tool(
+    'analyze_patterns',
+    'Cluster patterns across all registered projects by capability and explain similarities/differences in plain English. Cached to the registry; returns the cached result instantly when nothing has changed since the last run. Pass refresh: true to force a re-run.',
+    {
+      refresh: z.boolean().optional().describe('Force a re-run even if the cached analysis is fresh'),
+    },
+    async ({ refresh }) => {
+      try {
+        const registry = loadRegistry();
+        const staleness = getStaleness(registry);
+        const useCache = !refresh && registry.analysis && !staleness.stale;
+
+        if (useCache) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: JSON.stringify({
+                source: 'cached',
+                generatedAt: registry.analysis!.generatedAt,
+                stale: false,
+                clusters: registry.analysis!.clusters,
+              }, null, 2),
+            }],
+          };
+        }
+
+        const clusters = await runAnalysis({ registry, runner });
+        const updated = writeAnalysis(registry, clusters);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              source: 'fresh',
+              generatedAt: updated.analysis!.generatedAt,
+              stale: false,
+              previousChanges: staleness.changedProjects,
+              clusters,
+            }, null, 2),
+          }],
+        };
+      } catch (err) {
+        if (err instanceof ClaudeNotFoundError) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Claude Code CLI not found on PATH. Install it from https://claude.com/claude-code so the reuse server can shell out to \`claude -p\` for the analysis.`,
+            }],
+          };
+        }
+        if (err instanceof JsonParseError) {
+          const truncated = err.rawOutput.length > 500
+            ? err.rawOutput.slice(0, 500) + '… [truncated]'
+            : err.rawOutput;
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Claude returned non-JSON output and the retry also failed.\n\nFirst 500 chars of raw output:\n${truncated}`,
+            }],
+          };
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `analyze_patterns failed: ${message}`,
+          }],
+        };
       }
     }
   );

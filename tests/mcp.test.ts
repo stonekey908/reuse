@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { ClaudeNotFoundError, type ClaudeRunner } from '../src/analysis/runner';
 
 describe('MCP Server', () => {
   const testDir = path.join(os.tmpdir(), 'reuse-mcp-test-' + Date.now());
@@ -89,8 +90,8 @@ A demo of chunked file uploads with retry logic.
     expect(server).toBeDefined();
   });
 
-  async function wireUpClient() {
-    const server = createReuseServer();
+  async function wireUpClient(opts: { runner?: ClaudeRunner } = {}) {
+    const server = createReuseServer(opts);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'test', version: '0.0.0' });
     await Promise.all([
@@ -197,5 +198,129 @@ A demo of chunked file uploads with retry logic.
 
     const text = (result.content as Array<{ text: string }>)[0].text;
     expect(text).not.toContain('extract_patterns');
+  });
+
+  describe('analyze_patterns', () => {
+    const sampleResponse = JSON.stringify({
+      clusters: [
+        {
+          capability: 'Sample upload',
+          description: 'A sample cluster',
+          members: [{ project: 'sample-project', patternKey: 'foo', summary: 's' }],
+          similarities: 'Both upload.',
+          differences: 'foo is bigger.',
+        },
+      ],
+    });
+
+    function withPattern(name: string, key: string, description: string) {
+      const registry = JSON.parse(fs.readFileSync(path.join(testDir, 'registry.json'), 'utf-8'));
+      registry.projects[name].patterns[key] = description;
+      saveRegistry(registry);
+    }
+
+    it('exposes the analyze_patterns tool', async () => {
+      const { client } = await wireUpClient({ runner: async () => sampleResponse });
+      const tools = await client.listTools();
+      expect(tools.tools.map((t) => t.name)).toContain('analyze_patterns');
+    });
+
+    it('runs the analysis and caches the result on first call', async () => {
+      withPattern('sample-project', 'foo', 'sample pattern');
+      let runnerCalls = 0;
+      const { client } = await wireUpClient({
+        runner: async () => {
+          runnerCalls += 1;
+          return sampleResponse;
+        },
+      });
+
+      const result = await client.callTool({
+        name: 'analyze_patterns',
+        arguments: {},
+      });
+      const text = (result.content as Array<{ text: string }>)[0].text;
+      const body = JSON.parse(text);
+
+      expect(body.source).toBe('fresh');
+      expect(body.clusters).toHaveLength(1);
+      expect(body.clusters[0].capability).toBe('Sample upload');
+      expect(runnerCalls).toBe(1);
+
+      // Cached on disk
+      const stored = JSON.parse(fs.readFileSync(path.join(testDir, 'registry.json'), 'utf-8'));
+      expect(stored.analysis.clusters[0].capability).toBe('Sample upload');
+    });
+
+    it('returns cached result without invoking runner when fresh', async () => {
+      withPattern('sample-project', 'foo', 'sample pattern');
+      let runnerCalls = 0;
+      const { client } = await wireUpClient({
+        runner: async () => {
+          runnerCalls += 1;
+          return sampleResponse;
+        },
+      });
+
+      await client.callTool({ name: 'analyze_patterns', arguments: {} });
+      const second = await client.callTool({ name: 'analyze_patterns', arguments: {} });
+
+      const body = JSON.parse((second.content as Array<{ text: string }>)[0].text);
+      expect(body.source).toBe('cached');
+      expect(runnerCalls).toBe(1);
+    });
+
+    it('forces a re-run when refresh: true is passed', async () => {
+      withPattern('sample-project', 'foo', 'sample pattern');
+      let runnerCalls = 0;
+      const { client } = await wireUpClient({
+        runner: async () => {
+          runnerCalls += 1;
+          return sampleResponse;
+        },
+      });
+
+      await client.callTool({ name: 'analyze_patterns', arguments: {} });
+      const second = await client.callTool({
+        name: 'analyze_patterns',
+        arguments: { refresh: true },
+      });
+
+      const body = JSON.parse((second.content as Array<{ text: string }>)[0].text);
+      expect(body.source).toBe('fresh');
+      expect(runnerCalls).toBe(2);
+    });
+
+    it('surfaces ClaudeNotFoundError as readable text', async () => {
+      const { client } = await wireUpClient({
+        runner: async () => {
+          throw new ClaudeNotFoundError();
+        },
+      });
+
+      const result = await client.callTool({
+        name: 'analyze_patterns',
+        arguments: {},
+      });
+      const text = (result.content as Array<{ text: string }>)[0].text;
+      expect(text).toContain('Claude Code CLI not found');
+      expect(text).toContain('claude.com/claude-code');
+    });
+
+    it('surfaces JSON parse failures with truncated raw output', async () => {
+      const longBlob = 'x'.repeat(2000);
+      const { client } = await wireUpClient({
+        runner: async () => longBlob,
+      });
+
+      const result = await client.callTool({
+        name: 'analyze_patterns',
+        arguments: {},
+      });
+      const text = (result.content as Array<{ text: string }>)[0].text;
+      expect(text).toContain('non-JSON output');
+      expect(text).toContain('truncated');
+      expect(text.length).toBeLessThan(longBlob.length);
+    });
   });
 });
