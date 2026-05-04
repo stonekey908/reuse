@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Cluster } from '../shared/types.js';
+import type { AnalysisItem } from '../shared/types.js';
 import type { PatternEntry } from './prompt.js';
 import { stripCodeFences } from './runner.js';
 
@@ -24,15 +24,15 @@ export const JudgeReportSchema = z.object({
 
 export type JudgeReport = z.infer<typeof JudgeReportSchema>;
 
-export function buildJudgePrompt(clusters: Cluster[], patterns: PatternEntry[]): string {
-  return `You are a strict reviewer with deep code-reuse-domain expertise. Below is a clustering of patterns across multiple software projects, produced by another LLM. Your job is to score the output against a rubric and surface concrete, actionable weaknesses.
+export function buildJudgePrompt(clusters: AnalysisItem[], patterns: PatternEntry[]): string {
+  return `You are a strict reviewer with deep code-reuse-domain expertise. Below is a clustering of patterns across multiple software projects, produced by another LLM. The output mixes two kinds of items: \`kind: "cluster"\` (multi-member groups with similarities/differences) and \`kind: "standalone"\` (single patterns with rationale + closestRelative). Score the output against a rubric and surface concrete, actionable weaknesses.
 
 Score each rubric item 1-5 (1 = poor, 5 = excellent):
-- coherence: do the members of each cluster genuinely share the same capability?
-- similarity_quality: are the "similarities" prose substantive and specific, or boilerplate ("they are similar")?
-- difference_quality: are the "differences" prose substantive and specific?
+- coherence: do the members of each cluster genuinely share the same capability? Are standalone items genuinely standalone (not lazy singletons that should join a cluster)?
+- similarity_quality: for clusters, are the "similarities" prose substantive and specific? For standalones, is the "rationale" specific and concrete (not boilerplate "single member")?
+- difference_quality: for clusters, are the "differences" prose substantive and specific? For standalones, does "closestRelative" correctly identify the nearest related pattern with a concrete reason it doesn't fit?
 - consolidation_usefulness: when consolidationNote is present, is it concrete and actionable? (Score 5 if the absence of consolidationNote is appropriate for the cluster.)
-- granularity: are cluster names at a consistently high-level abstraction (e.g. "Document upload", "Encryption") rather than project-specific or overly specific names?
+- granularity: are cluster/standalone names at a consistently high-level abstraction (e.g. "Document upload", "Encryption") rather than project-specific or overly specific names?
 
 Return strict JSON, no prose, no markdown fences:
 {
@@ -72,7 +72,7 @@ export type ReportMeta = {
   judgeElapsedSec: number;
 };
 
-export function renderReport(report: JudgeReport, clusters: Cluster[], meta: ReportMeta): string {
+export function renderReport(report: JudgeReport, clusters: AnalysisItem[], meta: ReportMeta): string {
   const date = meta.generatedAt.toISOString();
   const lines: string[] = [];
   lines.push(`# Cluster quality report — ${date}`);
@@ -127,10 +127,14 @@ export function renderReport(report: JudgeReport, clusters: Cluster[], meta: Rep
   }
   lines.push('');
 
-  lines.push('## Cluster names (for quick reference)');
+  lines.push('## Item names (for quick reference)');
   lines.push('');
   for (const c of clusters) {
-    lines.push(`- **${c.capability}** (${c.members.length} ${c.members.length === 1 ? 'member' : 'members'})`);
+    if (c.kind === 'standalone') {
+      lines.push(`- **${c.capability}** (standalone)`);
+    } else {
+      lines.push(`- **${c.capability}** (${c.members.length} ${c.members.length === 1 ? 'member' : 'members'})`);
+    }
   }
   lines.push('');
 

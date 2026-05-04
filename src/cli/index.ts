@@ -12,7 +12,7 @@ import {
   JsonParseError,
   runAnalysis,
 } from '../analysis/runner.js';
-import type { Analysis, Cluster } from '../shared/types.js';
+import type { Analysis, AnalysisItem } from '../shared/types.js';
 
 const program = new Command();
 
@@ -166,24 +166,37 @@ program
 // ─── Analysis & Evals ───
 
 function printAnalysis(analysis: Analysis, source: 'cached' | 'fresh'): void {
+  const items = analysis.clusters;
+  const clusterCount = items.filter((i) => i.kind !== 'standalone').length;
+  const standaloneCount = items.filter((i) => i.kind === 'standalone').length;
   console.log();
-  console.log(`  ${analysis.clusters.length} cluster${analysis.clusters.length === 1 ? '' : 's'}  ·  ${source}  ·  generated ${analysis.generatedAt}`);
+  console.log(`  ${clusterCount} cluster${clusterCount === 1 ? '' : 's'} · ${standaloneCount} standalone · ${source} · generated ${analysis.generatedAt}`);
   console.log();
-  for (const cluster of analysis.clusters) {
-    printCluster(cluster);
+  for (const item of items) {
+    printItem(item);
   }
 }
 
-function printCluster(cluster: Cluster): void {
-  console.log(`  ▍ ${cluster.capability}  (${cluster.members.length} ${cluster.members.length === 1 ? 'pattern' : 'patterns'})`);
-  console.log(`     ${cluster.description}`);
-  for (const m of cluster.members) {
+function printItem(item: AnalysisItem): void {
+  if (item.kind === 'standalone') {
+    console.log(`  ▏ ${item.capability}  (standalone)`);
+    console.log(`     ${item.description}`);
+    console.log(`       · ${item.member.project}/${item.member.patternKey}  —  ${item.member.summary}`);
+    console.log(`     Rationale:        ${item.rationale}`);
+    console.log(`     Closest relative: ${item.closestRelative}`);
+    if (item.notes) console.log(`     Notes: ${item.notes}`);
+    console.log();
+    return;
+  }
+  console.log(`  ▍ ${item.capability}  (${item.members.length} ${item.members.length === 1 ? 'pattern' : 'patterns'})`);
+  console.log(`     ${item.description}`);
+  for (const m of item.members) {
     console.log(`       · ${m.project}/${m.patternKey}  —  ${m.summary}`);
   }
-  console.log(`     Similarities: ${cluster.similarities}`);
-  console.log(`     Differences:  ${cluster.differences}`);
-  if (cluster.consolidationNote) {
-    console.log(`     → Consolidate: ${cluster.consolidationNote}`);
+  console.log(`     Similarities: ${item.similarities}`);
+  console.log(`     Differences:  ${item.differences}`);
+  if (item.consolidationNote) {
+    console.log(`     → Consolidate: ${item.consolidationNote}`);
   }
   console.log();
 }

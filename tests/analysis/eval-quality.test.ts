@@ -131,7 +131,7 @@ describe('renderReport', () => {
     expect(md).toContain('Granularity / abstraction level');
     expect(md).toContain('## Weaknesses');
     expect(md).toContain('## Suggestions');
-    expect(md).toContain('## Cluster names (for quick reference)');
+    expect(md).toContain('## Item names (for quick reference)');
   });
 
   it('quotes verbatim weakness evidence as a markdown blockquote', () => {
