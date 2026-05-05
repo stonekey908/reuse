@@ -155,17 +155,37 @@ function ThemedAnalysisList({
   }, [items]);
 
   // All themes expanded on first render so the user sees the two-level
-  // structure immediately. They can collapse a theme by clicking its
-  // header. The previous default (collapse "misc" only) hid the entire
-  // analysis when an old cached run had no theme field on any item — every
-  // item bucketed into "misc" → user saw one collapsed section that read
-  // as "still flat".
+  // structure immediately. Click a header to collapse a single theme;
+  // use the Expand all / Collapse all buttons to act on every section.
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   if (buckets.length === 0) return null;
 
+  const expandAll = () => setCollapsed({});
+  const collapseAll = () =>
+    setCollapsed(Object.fromEntries(buckets.map(([id]) => [id, true])));
+  const allCollapsed = buckets.every(([id]) => collapsed[id]);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          onClick={allCollapsed ? expandAll : collapseAll}
+          style={{
+            padding: '0.375rem 0.75rem',
+            background: 'transparent',
+            border: '1px solid #d4d4d4',
+            borderRadius: 4,
+            cursor: 'pointer',
+            fontSize: '0.8125rem',
+            color: '#333',
+          }}
+        >
+          {allCollapsed ? 'Expand all' : 'Collapse all'}
+        </button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {buckets.map(([themeId, themeItems]) => {
         const isCollapsed = !!collapsed[themeId];
         return (
@@ -219,6 +239,7 @@ function ThemedAnalysisList({
           </section>
         );
       })}
+      </div>
     </div>
   );
 }

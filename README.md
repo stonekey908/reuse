@@ -48,8 +48,8 @@ The AI will handle cloning, building, and wiring up the MCP config for your spec
 ### Projects tab — every registered project with tags, patterns, and capability badges
 ![Projects tab showing project cards with metadata, tags, and pattern lists. Project names masked to project-a through project-h.](docs/screenshots/10-projects-tab.png)
 
-### Analysis tab — patterns clustered across the registry by capability
-![Analysis tab showing clusters and standalones produced by the analyze_patterns pipeline, with capability/level/domain tags. Real project names replaced with project-a through project-h aliases.](docs/screenshots/11-analysis-tab.png)
+### Analysis tab — two-level theme tree, collapsible per section
+![Analysis tab showing 12 collapsible theme sections (AI & LLM, UI components, Data storage, Cloud functions, State & background, Realtime & messaging, Image & media, Dev tooling, Distribution & CLI, Testing, Documentation, Observability) with item counts and an Expand all toggle.](docs/screenshots/12-analysis-themes-collapsed.png)
 
 ## Manual Setup
 
@@ -327,7 +327,7 @@ Run `reuse serve` and open `http://localhost:3210`.
 - Add new projects with the form
 - Edit any field — path, description, tags, git URL, patterns, links
 - Remove projects
-- The **Analysis** tab clusters patterns across the whole registry by capability and shows a staleness banner when projects change after the last run
+- The **Analysis** tab clusters patterns across the whole registry into a two-level tree — top-level **theme** (AI & LLM, UI components, Data storage, Realtime, Image & media, Dev tooling, Distribution & CLI, Testing, Docs & spec, Observability, …) → cluster or standalone → pattern members. Sections are collapsible per-theme with an Expand all / Collapse all toggle, and a staleness banner lights up when projects change after the cached run
 - All changes write to the same registry file used by the CLI and MCP
 
 ## Analysis & Evals
@@ -341,6 +341,18 @@ reuse analyze --refresh    # force a re-run
 ```
 
 The web UI exposes the same analysis through a provider/model picker, with a Stop button, live elapsed timer, and a staleness banner that lights up when projects change after the cached run.
+
+### Two-level theme grouping
+
+Analysis output is organised as a tree, not a flat list:
+
+1. **Theme** (top level) — one of 12 canonical functional areas plus *Other*: `ai-llm`, `ui-components`, `data-storage-sync`, `cloud-backend`, `state-background`, `realtime-messaging`, `image-media`, `dev-tooling`, `distribution-cli`, `testing-quality`, `docs-spec`, `observability-errors`. Themes describe **functional capability** (what the code does); they're a different axis from the per-pattern `domain` field which describes **implementation layer** (where the code lives).
+2. **Capability cluster or standalone** (second level) — human-readable cluster names like "Document upload", "Reusable modal shell", "Multi-provider AI routing".
+3. **Pattern members** — the actual entries from your projects.
+
+Each theme is a collapsible section in the web UI with an item count. Use the **Expand all / Collapse all** toggle to flip every section in one click.
+
+The theme list was empirically grounded by analysing a real 92-pattern multi-app registry and cross-referenced against [awesome-nodejs](https://github.com/sindresorhus/awesome-nodejs) (~50 cats), [awesome-react](https://github.com/enaqx/awesome-react) (~22), the [CNCF Cloud Native Landscape](https://landscape.cncf.io/guide) (6 layers), and full-stack tech-stack categorisations. 12 themes turned out to be the sweet spot — fine enough that "where would I look for image processing?" has an obvious answer, coarse enough that the page doesn't degenerate into a flat scroll.
 
 ### Built-in evals
 

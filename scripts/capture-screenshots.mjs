@@ -134,12 +134,12 @@ async function main() {
       })();
     `;
 
-    async function capture(targetPath, fileName, scrollToAnalysisTab = false) {
+    async function capture(targetPath, fileName, opts = {}) {
+      const { scrollToAnalysisTab = false, collapseAllThemes = false } = opts;
       await page.goto(BASE + targetPath, { waitUntil: 'networkidle0' });
       // Give React time to paint and any analysis tab to load.
       await new Promise((r) => setTimeout(r, 800));
       if (scrollToAnalysisTab) {
-        // Click the Analysis tab if visible.
         await page.evaluate(() => {
           const tabs = Array.from(document.querySelectorAll('button, a'));
           const analysisTab = tabs.find((el) => el.textContent && /analysis/i.test(el.textContent.trim()));
@@ -147,7 +147,14 @@ async function main() {
         });
         await new Promise((r) => setTimeout(r, 600));
       }
-      // Inject masking AFTER the page has rendered so we catch the analysis content.
+      if (collapseAllThemes) {
+        await page.evaluate(() => {
+          const btns = Array.from(document.querySelectorAll('button'));
+          const collapse = btns.find((b) => b.textContent && /collapse all/i.test(b.textContent.trim()));
+          if (collapse) collapse.click();
+        });
+        await new Promise((r) => setTimeout(r, 400));
+      }
       await page.evaluate(maskScript(FULL_MAP));
       await new Promise((r) => setTimeout(r, 200));
       const out = path.join(OUT_DIR, fileName);
@@ -156,7 +163,8 @@ async function main() {
     }
 
     await capture('/', '10-projects-tab.png');
-    await capture('/', '11-analysis-tab.png', true);
+    await capture('/', '11-analysis-tab.png', { scrollToAnalysisTab: true });
+    await capture('/', '12-analysis-themes-collapsed.png', { scrollToAnalysisTab: true, collapseAllThemes: true });
 
     await browser.close();
   } finally {
