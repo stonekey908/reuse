@@ -10,8 +10,15 @@ import {
   JsonParseError,
   defaultClaudeRunner,
   runAnalysis,
+  runnerFromProvider,
   type ClaudeRunner,
 } from '../analysis/runner.js';
+import {
+  listProviders,
+  ProviderNotConfiguredError,
+  ContextWindowExceededError,
+  type ProviderId,
+} from '../analysis/providers/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -100,19 +107,47 @@ export function createApp(options: CreateAppOptions = {}): Express {
     });
   });
 
-  app.post('/api/analysis/run', async (_req, res) => {
+  app.get('/api/providers', async (_req, res) => {
+    try {
+      const infos = await listProviders();
+      res.json({ providers: infos });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.post('/api/analysis/run', async (req, res) => {
     const started = Date.now();
+    const body = (req.body ?? {}) as {
+      provider?: ProviderId;
+      model?: string;
+      mode?: 'reset' | 'append';
+    };
+    const mode = body.mode === 'append' ? 'append' : 'reset';
     try {
       const registry = loadRegistry();
       const patternCount = Object.values(registry.projects).reduce(
         (sum, p) => sum + Object.keys(p.patterns ?? {}).length,
         0,
       );
-      console.log(`[analysis] starting run — ${patternCount} patterns across ${Object.keys(registry.projects).length} projects (typically 3–6 min)`);
-      const clusters = await runAnalysis({ registry, runner });
-      const updated = writeAnalysis(registry, clusters);
+
+      // Pick runner: explicit provider/model from request, else fall back to default (Anthropic).
+      let chosenRunner: ClaudeRunner = runner;
+      let providerLabel = 'default';
+      if (body.provider) {
+        chosenRunner = await runnerFromProvider(body.provider, body.model);
+        providerLabel = `${body.provider}${body.model ? `/${body.model}` : ''}`;
+      }
+
+      console.log(`[analysis] starting run — ${patternCount} patterns across ${Object.keys(registry.projects).length} projects · ${providerLabel} · mode=${mode}`);
+      const clusters = await runAnalysis({
+        registry,
+        runner: chosenRunner,
+        tag: body.provider ? { provider: body.provider, model: body.model || 'default' } : undefined,
+      });
+      const updated = writeAnalysis(registry, clusters, mode);
       const staleness = getStaleness(updated);
-      console.log(`[analysis] done in ${Math.round((Date.now() - started) / 1000)}s — ${clusters.length} clusters`);
+      console.log(`[analysis] done in ${Math.round((Date.now() - started) / 1000)}s — ${clusters.length} new items (${updated.analysis!.clusters.length} total in cache)`);
       res.json({
         analysis: updated.analysis,
         stale: staleness.stale,
@@ -120,6 +155,19 @@ export function createApp(options: CreateAppOptions = {}): Express {
       });
     } catch (err) {
       console.log(`[analysis] failed after ${Math.round((Date.now() - started) / 1000)}s — ${err instanceof Error ? err.message : String(err)}`);
+      if (err instanceof ProviderNotConfiguredError) {
+        res.status(400).json({
+          error: err.message,
+          code: 'PROVIDER_NOT_CONFIGURED',
+          provider: err.provider,
+          envKey: err.envKey,
+        });
+        return;
+      }
+      if (err instanceof ContextWindowExceededError) {
+        res.status(400).json({ error: err.message, code: 'CONTEXT_WINDOW_EXCEEDED' });
+        return;
+      }
       if (err instanceof ClaudeNotFoundError) {
         res.status(500).json({
           error: err.message,

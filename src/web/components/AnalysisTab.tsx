@@ -4,6 +4,7 @@ import ClusterCard from './ClusterCard';
 import StandalonePatternCard from './StandalonePatternCard';
 import AnalysisToolbar, { type SortMode } from './AnalysisToolbar';
 import ProjectFilterChips from './ProjectFilterChips';
+import ProviderPicker, { type ProviderId, type ProviderInfo, type RunMode } from './ProviderPicker';
 
 type ClusterMember = { project: string; patternKey: string; summary: string };
 type Cluster = {
@@ -119,12 +120,53 @@ export default function AnalysisTab({ onJumpToProject }: Props) {
   const [query, setQuery] = useState('');
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState<SortMode>('default');
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(
+    () => (typeof window !== 'undefined' ? (localStorage.getItem('reuse:provider') as ProviderId | null) : null),
+  );
+  const [selectedModel, setSelectedModel] = useState<string | null>(
+    () => (typeof window !== 'undefined' ? localStorage.getItem('reuse:model') : null),
+  );
+  const [runMode, setRunMode] = useState<RunMode>(
+    () => (typeof window !== 'undefined' && localStorage.getItem('reuse:runMode') === 'append' ? 'append' : 'reset'),
+  );
 
   const fetchAnalysis = async () => {
     const res = await fetch('/api/analysis');
     const json: AnalysisResponse = await res.json();
     setData(json);
   };
+
+  const fetchProviders = async () => {
+    const res = await fetch('/api/providers');
+    if (!res.ok) return;
+    const json: { providers: ProviderInfo[] } = await res.json();
+    setProviders(json.providers);
+
+    // Pick a sensible default if none selected yet, or if the saved selection is unavailable.
+    const savedProvider = selectedProvider;
+    const savedAvailable = json.providers.find((p) => p.id === savedProvider)?.available;
+    if (!savedProvider || !savedAvailable) {
+      const firstAvail = json.providers.find((p) => p.available && p.models.length > 0);
+      if (firstAvail) {
+        setSelectedProvider(firstAvail.id);
+        setSelectedModel(firstAvail.models[0].id);
+      }
+    } else if (!selectedModel) {
+      const provider = json.providers.find((p) => p.id === savedProvider);
+      if (provider?.models[0]) setSelectedModel(provider.models[0].id);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedProvider && typeof window !== 'undefined') localStorage.setItem('reuse:provider', selectedProvider);
+  }, [selectedProvider]);
+  useEffect(() => {
+    if (selectedModel && typeof window !== 'undefined') localStorage.setItem('reuse:model', selectedModel);
+  }, [selectedModel]);
+  useEffect(() => {
+    if (typeof window !== 'undefined') localStorage.setItem('reuse:runMode', runMode);
+  }, [runMode]);
 
   const fetchEmptyPatternStats = async () => {
     const res = await fetch('/api/projects');
@@ -140,17 +182,29 @@ export default function AnalysisTab({ onJumpToProject }: Props) {
   useEffect(() => {
     fetchAnalysis();
     fetchEmptyPatternStats();
+    fetchProviders();
   }, []);
 
   const runAnalysis = async () => {
+    if (!selectedProvider || !selectedModel) {
+      setError('Pick a provider and model before running.');
+      return;
+    }
     setRunning(true);
     setError(null);
     setRawOutput(null);
     try {
-      const res = await fetch('/api/analysis/run', { method: 'POST' });
+      const res = await fetch('/api/analysis/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: selectedProvider, model: selectedModel, mode: runMode }),
+      });
       const json = await res.json();
       if (!res.ok) {
         setError(json.error || 'Analysis failed.');
+        if (json.code === 'PROVIDER_NOT_CONFIGURED') {
+          setError(`${json.error}\n\nAdd ${json.envKey} to your .env and restart the server.`);
+        }
         if (json.code === 'CLAUDE_NOT_FOUND' && json.hint) setError(`${json.error}\n\n${json.hint}`);
         if (json.code === 'JSON_PARSE_FAILED' && json.rawOutput) setRawOutput(json.rawOutput);
         return;
@@ -210,9 +264,25 @@ export default function AnalysisTab({ onJumpToProject }: Props) {
           disabled={running}
           style={running ? disabledButtonStyle : buttonStyle}
         >
-          {running ? 'Running… 3–6 min for full registry' : hasAnalysis ? 'Re-run analysis' : 'Run analysis'}
+          {running ? 'Running… typically 30–90s on cloud providers' : hasAnalysis ? 'Re-run analysis' : 'Run analysis'}
         </button>
       </div>
+
+      <ProviderPicker
+        providers={providers}
+        selectedProvider={selectedProvider}
+        selectedModel={selectedModel}
+        onProviderChange={(p) => {
+          setSelectedProvider(p);
+          // Auto-select first model when provider changes
+          const firstModel = providers.find((info) => info.id === p)?.models[0]?.id ?? null;
+          setSelectedModel(firstModel);
+        }}
+        onModelChange={setSelectedModel}
+        mode={runMode}
+        onModeChange={setRunMode}
+        hasExistingAnalysis={hasAnalysis}
+      />
 
       <StalenessBanner
         hasAnalysis={hasAnalysis}

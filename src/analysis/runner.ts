@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import { z } from 'zod';
 import {
   AnalysisItemSchema,
@@ -6,6 +5,7 @@ import {
   type Registry,
 } from '../shared/types.js';
 import { buildPrompt, collectPatterns } from './prompt.js';
+import { getProvider, type ProviderId } from './providers/index.js';
 
 export class ClaudeNotFoundError extends Error {
   constructor() {
@@ -17,50 +17,12 @@ export class ClaudeNotFoundError extends Error {
 export class JsonParseError extends Error {
   constructor(public readonly rawOutput: string, cause?: unknown) {
     const causeMsg = cause instanceof Error ? cause.message : String(cause);
-    super(`Failed to parse Claude output as JSON: ${causeMsg}`);
+    super(`Failed to parse provider output as JSON: ${causeMsg}`);
     this.name = 'JsonParseError';
   }
 }
 
 export type ClaudeRunner = (prompt: string) => Promise<string>;
-
-/**
- * Model used by `claude -p` for analysis. Defaults to sonnet — clustering is
- * a structured-output task, doesn't need Opus-level reasoning, and Opus is
- * 3-5x slower for this prompt size. Override with REUSE_CLAUDE_MODEL.
- */
-const CLAUDE_MODEL = process.env.REUSE_CLAUDE_MODEL || 'sonnet';
-
-export const defaultClaudeRunner: ClaudeRunner = (prompt) => {
-  return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-p', '--model', CLAUDE_MODEL, prompt], { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-
-    child.on('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'ENOENT') {
-        reject(new ClaudeNotFoundError());
-        return;
-      }
-      reject(err);
-    });
-
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.on('close', (code) => {
-      if (code !== 0) {
-        reject(new Error(`claude -p exited with code ${code}: ${stderr.trim()}`));
-        return;
-      }
-      resolve(stdout);
-    });
-  });
-};
 
 const FENCED_BLOCK = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/;
 
@@ -82,28 +44,53 @@ export function parseClusters(raw: string): AnalysisItem[] {
   return Array.isArray(validated) ? validated : validated.clusters;
 }
 
+/**
+ * Wraps a Provider as a ClaudeRunner so existing tests + MCP tool keep working.
+ */
+export async function runnerFromProvider(provider: ProviderId, model?: string): Promise<ClaudeRunner> {
+  const p = await getProvider(provider);
+  return async (prompt: string) => p.complete(prompt, { model });
+}
+
+export const defaultClaudeRunner: ClaudeRunner = async (prompt) => {
+  // Default = whichever provider is configured, picking Anthropic Sonnet first.
+  const p = await getProvider('anthropic');
+  return p.complete(prompt);
+};
+
+export interface RunAnalysisOpts {
+  registry: Registry;
+  runner?: ClaudeRunner;
+  /** Provider/model to tag the produced items with. Optional — defaults to no tag. */
+  tag?: { provider: string; model: string };
+}
+
 export async function runAnalysis({
   registry,
   runner = defaultClaudeRunner,
-}: {
-  registry: Registry;
-  runner?: ClaudeRunner;
-}): Promise<AnalysisItem[]> {
+  tag,
+}: RunAnalysisOpts): Promise<AnalysisItem[]> {
   const priorClusters = registry.analysis?.clusters;
   const patterns = collectPatterns(registry);
 
   const firstPrompt = buildPrompt({ priorClusters, patterns });
   const firstOutput = await runner(firstPrompt);
 
+  let items: AnalysisItem[];
   try {
-    return parseClusters(firstOutput);
+    items = parseClusters(firstOutput);
   } catch {
     const retryPrompt = buildPrompt({ priorClusters, patterns, strict: true });
     const retryOutput = await runner(retryPrompt);
     try {
-      return parseClusters(retryOutput);
+      items = parseClusters(retryOutput);
     } catch (err) {
       throw new JsonParseError(retryOutput, err);
     }
   }
+
+  if (tag) {
+    items = items.map((item) => ({ ...item, provider: tag.provider, model: tag.model }));
+  }
+  return items;
 }

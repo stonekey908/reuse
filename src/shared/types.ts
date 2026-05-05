@@ -23,6 +23,8 @@ export const ClusterSchema = z.object({
   similarities: z.string().describe('Natural-language description of what cluster members share'),
   differences: z.string().describe('Natural-language description of how cluster members diverge'),
   consolidationNote: z.string().optional().describe('Optional reuse / consolidation suggestion'),
+  provider: z.string().optional().describe('Provider that produced this item (anthropic, openai, gemini, ollama)'),
+  model: z.string().optional().describe('Model id that produced this item'),
 });
 
 export const StandalonePatternSchema = z.object({
@@ -33,6 +35,8 @@ export const StandalonePatternSchema = z.object({
   rationale: z.string().describe('Why this pattern stands alone — what makes it its own category'),
   closestRelative: z.string().describe('The nearest related pattern in the registry and why it does not fit'),
   notes: z.string().optional().describe('Optional extra notes'),
+  provider: z.string().optional().describe('Provider that produced this item (anthropic, openai, gemini, ollama)'),
+  model: z.string().optional().describe('Model id that produced this item'),
 });
 
 export const AnalysisItemSchema = z.union([StandalonePatternSchema, ClusterSchema]);
