@@ -37,10 +37,13 @@ export function buildOpenAIProvider(): Provider {
     }
 
     const client = new OpenAI({ apiKey });
-    const response = await client.chat.completions.create({
-      model: modelId,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    const response = await client.chat.completions.create(
+      {
+        model: modelId,
+        messages: [{ role: 'user', content: prompt }],
+      },
+      { signal: opts.signal },
+    );
 
     const text = response.choices[0]?.message?.content;
     if (!text) throw new Error(`OpenAI returned no content. Finish reason: ${response.choices[0]?.finish_reason}`);

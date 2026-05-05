@@ -73,6 +73,7 @@ export async function buildOllamaProvider(): Promise<Provider> {
         stream: false,
         options: { num_ctx: DEFAULT_NUM_CTX },
       }),
+      signal: opts.signal,
     });
     if (!res.ok) {
       const errText = await res.text().catch(() => '');

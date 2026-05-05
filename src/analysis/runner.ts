@@ -47,9 +47,9 @@ export function parseClusters(raw: string): AnalysisItem[] {
 /**
  * Wraps a Provider as a ClaudeRunner so existing tests + MCP tool keep working.
  */
-export async function runnerFromProvider(provider: ProviderId, model?: string): Promise<ClaudeRunner> {
+export async function runnerFromProvider(provider: ProviderId, model?: string, signal?: AbortSignal): Promise<ClaudeRunner> {
   const p = await getProvider(provider);
-  return async (prompt: string) => p.complete(prompt, { model });
+  return async (prompt: string) => p.complete(prompt, { model, signal });
 }
 
 export const defaultClaudeRunner: ClaudeRunner = async (prompt) => {

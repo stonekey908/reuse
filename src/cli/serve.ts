@@ -116,8 +116,35 @@ export function createApp(options: CreateAppOptions = {}): Express {
     }
   });
 
+  // Track the in-flight analysis run so the user can cancel it from the UI.
+  let inFlight: { abort: AbortController; startedAt: number } | null = null;
+
+  app.post('/api/analysis/cancel', (_req, res) => {
+    if (!inFlight) {
+      res.status(404).json({ error: 'No analysis run in flight.' });
+      return;
+    }
+    const elapsed = Math.round((Date.now() - inFlight.startedAt) / 1000);
+    inFlight.abort.abort();
+    console.log(`[analysis] cancel requested after ${elapsed}s`);
+    res.json({ ok: true, elapsedSec: elapsed });
+  });
+
+  app.get('/api/analysis/status', (_req, res) => {
+    res.json({
+      running: !!inFlight,
+      elapsedSec: inFlight ? Math.round((Date.now() - inFlight.startedAt) / 1000) : 0,
+    });
+  });
+
   app.post('/api/analysis/run', async (req, res) => {
+    if (inFlight) {
+      res.status(409).json({ error: 'An analysis run is already in flight. Cancel it first or wait for it to finish.', code: 'RUN_IN_FLIGHT' });
+      return;
+    }
     const started = Date.now();
+    const abort = new AbortController();
+    inFlight = { abort, startedAt: started };
     const body = (req.body ?? {}) as {
       provider?: ProviderId;
       model?: string;
@@ -135,7 +162,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
       let chosenRunner: ClaudeRunner = runner;
       let providerLabel = 'default';
       if (body.provider) {
-        chosenRunner = await runnerFromProvider(body.provider, body.model);
+        chosenRunner = await runnerFromProvider(body.provider, body.model, abort.signal);
         providerLabel = `${body.provider}${body.model ? `/${body.model}` : ''}`;
       }
 
@@ -154,7 +181,15 @@ export function createApp(options: CreateAppOptions = {}): Express {
         changedProjects: staleness.changedProjects,
       });
     } catch (err) {
-      console.log(`[analysis] failed after ${Math.round((Date.now() - started) / 1000)}s — ${err instanceof Error ? err.message : String(err)}`);
+      const elapsed = Math.round((Date.now() - started) / 1000);
+      const isAbort = abort.signal.aborted ||
+        (err instanceof Error && (err.name === 'AbortError' || /aborted|cancelled|canceled/i.test(err.message)));
+      if (isAbort) {
+        console.log(`[analysis] cancelled after ${elapsed}s`);
+        res.status(499).json({ error: 'Analysis cancelled by user.', code: 'CANCELLED', elapsedSec: elapsed });
+        return;
+      }
+      console.log(`[analysis] failed after ${elapsed}s — ${err instanceof Error ? err.message : String(err)}`);
       if (err instanceof ProviderNotConfiguredError) {
         res.status(400).json({
           error: err.message,
@@ -186,6 +221,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
       }
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message, code: 'ANALYSIS_FAILED' });
+    } finally {
+      inFlight = null;
     }
   });
 
