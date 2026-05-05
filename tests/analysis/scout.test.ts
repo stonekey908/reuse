@@ -84,6 +84,22 @@ describe('scout: deterministic Layer 1 quality', () => {
     }
   });
 
+  it('populates userFacingScreens from the fixture web app', () => {
+    const report = buildScoutReportForProject('sample-monorepo', fixtureProject);
+    expect(Array.isArray(report.userFacingScreens)).toBe(true);
+    // The fixture has apps/web/src/page.tsx — should be surfaced.
+    expect(report.userFacingScreens.some((s) => s.endsWith('/page.tsx'))).toBe(true);
+  });
+
+  it('SCOUT_INSTRUCTIONS now teach capability-walk and design-doc filtering', () => {
+    const report = buildScoutReportForProject('sample-monorepo', fixtureProject);
+    const joined = report.instructions.join('\n');
+    expect(joined).toContain('CAPABILITY-WALK');
+    expect(joined).toContain('userFacingScreens');
+    expect(joined).toContain('NOT-A-PATTERN');
+    expect(joined).toContain('design docs');
+  });
+
   it('returns a friendly error when the project is missing from the registry', () => {
     const registry: Registry = { projects: {} };
     const result = buildScoutReport('does-not-exist', registry);

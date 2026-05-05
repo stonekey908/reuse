@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { ABSTRACTION_LEVELS, type Pattern } from '../shared/types.js';
 import { loadRegistry, saveRegistry } from '../shared/registry.js';
 import { searchProjects } from '../shared/search.js';
 import { getStaleness, writeAnalysis } from '../analysis/cache.js';
@@ -78,6 +79,36 @@ function grepFallback(projectPath: string, pattern: string, fileGlob?: string): 
 
   walk(projectPath);
   return results.join('\n');
+}
+
+// Pattern input accepted by register_project / update_project. Callers may
+// pass either a bare description string (legacy / quick form) or the
+// structured object with capability/abstractionLevel/domain/fileEvidence
+// tags. Both shapes normalise to the structured Pattern at write time.
+const PatternInputSchema = z.union([
+  z.string(),
+  z.object({
+    description: z.string(),
+    capability: z.string().optional(),
+    abstractionLevel: z.enum(ABSTRACTION_LEVELS).optional(),
+    domain: z.string().optional(),
+    fileEvidence: z.array(z.string()).optional(),
+  }),
+]);
+
+type PatternInput = z.infer<typeof PatternInputSchema>;
+
+function normalisePatternInput(input: PatternInput): Pattern {
+  if (typeof input === 'string') {
+    return { description: input, fileEvidence: [] };
+  }
+  return {
+    description: input.description,
+    capability: input.capability,
+    abstractionLevel: input.abstractionLevel,
+    domain: input.domain,
+    fileEvidence: input.fileEvidence ?? [],
+  };
 }
 
 export function createReuseServer(options: CreateReuseServerOptions = {}): McpServer {
@@ -354,7 +385,10 @@ export function createReuseServer(options: CreateReuseServerOptions = {}): McpSe
       projectPath: z.string().describe('Absolute path to the project directory'),
       description: z.string().optional().describe('Human-readable description'),
       tags: z.array(z.string()).optional().describe('Searchable tags'),
-      patterns: z.record(z.string(), z.string()).optional().describe('Named patterns with descriptions'),
+      patterns: z
+        .record(z.string(), PatternInputSchema)
+        .optional()
+        .describe('Named patterns. Each value can be a string description (legacy) or a structured object with optional capability/abstractionLevel/domain/fileEvidence tags.'),
       git: z.string().optional().describe('Git remote URL'),
       links: z.record(z.string(), z.string()).optional().describe('External links (linear, figma, etc.)'),
     },
@@ -377,12 +411,11 @@ export function createReuseServer(options: CreateReuseServerOptions = {}): McpSe
         } catch { /* no git remote */ }
       }
 
-      // Strings come in via the MCP tool's argv schema; upgrade each to the
-      // structured Pattern shape at write time. Tags can be added later via
-      // the (forthcoming) Tagger agent or update_project.
-      const upgradedPatterns: Record<string, { description: string; fileEvidence: string[] }> = {};
+      // Patterns may arrive as bare strings or fully-tagged structured objects.
+      // Both normalise to the structured Pattern shape on disk.
+      const upgradedPatterns: Record<string, Pattern> = {};
       for (const [k, v] of Object.entries(patterns || {})) {
-        upgradedPatterns[k] = { description: v, fileEvidence: [] };
+        upgradedPatterns[k] = normalisePatternInput(v);
       }
 
       registry.projects[name] = {
@@ -417,7 +450,10 @@ export function createReuseServer(options: CreateReuseServerOptions = {}): McpSe
       name: z.string().describe('The project name exactly as registered in the registry'),
       description: z.string().optional().describe('New description'),
       tags: z.array(z.string()).optional().describe('Replace tags'),
-      patterns: z.record(z.string(), z.string()).optional().describe('Merge new patterns (existing keys are overwritten)'),
+      patterns: z
+        .record(z.string(), PatternInputSchema)
+        .optional()
+        .describe('Merge new patterns. Each value can be a string description or a structured object with capability/abstractionLevel/domain/fileEvidence. Existing keys are overwritten.'),
       git: z.string().optional().describe('Update git URL'),
       links: z.record(z.string(), z.string()).optional().describe('Merge new links'),
     },
@@ -432,12 +468,18 @@ export function createReuseServer(options: CreateReuseServerOptions = {}): McpSe
       if (description !== undefined) project.description = description;
       if (tags !== undefined) project.tags = tags;
       if (patterns !== undefined) {
-        // Upgrade each incoming string to structured Pattern. If the key already
-        // exists (carrying tags), preserve those tags and only update the description.
+        // Patterns may arrive as bare strings or structured objects. Bare strings
+        // preserve any existing tags on that key (description-only update);
+        // structured objects fully replace the entry with the supplied tags
+        // (use this shape when re-tagging a pattern).
         const merged = { ...project.patterns };
         for (const [k, v] of Object.entries(patterns)) {
           const existing = merged[k];
-          merged[k] = { ...(existing ?? { fileEvidence: [] }), description: v };
+          if (typeof v === 'string') {
+            merged[k] = { ...(existing ?? { fileEvidence: [] }), description: v };
+          } else {
+            merged[k] = normalisePatternInput(v);
+          }
         }
         project.patterns = merged;
       }
