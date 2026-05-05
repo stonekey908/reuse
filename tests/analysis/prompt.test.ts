@@ -82,4 +82,14 @@ describe('buildPrompt', () => {
     expect(strict).toContain('IMPORTANT');
     expect(strict).toContain('first character must be `{`');
   });
+
+  it('lists the canonical themes and tells the model to tag each item', () => {
+    const prompt = buildPrompt({ patterns });
+    expect(prompt).toContain('TOP-LEVEL THEMES');
+    expect(prompt).toContain('"ai-llm"');
+    expect(prompt).toContain('"data-storage-sync"');
+    expect(prompt).toContain('"image-media"');
+    expect(prompt).toContain('"security-encryption"');
+    expect(prompt).toContain('MUST include a `theme` field');
+  });
 });

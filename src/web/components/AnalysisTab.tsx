@@ -5,10 +5,12 @@ import StandalonePatternCard from './StandalonePatternCard';
 import AnalysisToolbar, { type SortMode } from './AnalysisToolbar';
 import ProjectFilterChips from './ProjectFilterChips';
 import ProviderPicker, { type ProviderId, type ProviderInfo, type RunMode } from './ProviderPicker';
+import { ANALYSIS_THEMES, themeLabel } from '../../shared/themes';
 
 type ClusterMember = { project: string; patternKey: string; summary: string };
 type Cluster = {
   kind?: 'cluster';
+  theme?: string;
   capability: string;
   description: string;
   members: ClusterMember[];
@@ -18,6 +20,7 @@ type Cluster = {
 };
 type StandalonePattern = {
   kind: 'standalone';
+  theme?: string;
   capability: string;
   description: string;
   member: ClusterMember;
@@ -125,6 +128,95 @@ function compareItems(a: AnalysisItem, b: AnalysisItem, mode: SortMode): number 
     return 0;
   }
   return 0;
+}
+
+/**
+ * Group analysis items by their `theme` field and render each group as a
+ * collapsible section. Items without a theme (legacy cache or model omission)
+ * land under "Other".
+ */
+function ThemedAnalysisList({
+  items,
+  onMemberClick,
+}: {
+  items: AnalysisItem[];
+  onMemberClick?: (project: string) => void;
+}) {
+  // Preserve canonical theme order from ANALYSIS_THEMES; bucket per theme.
+  const buckets = useMemo(() => {
+    const map = new Map<string, AnalysisItem[]>();
+    for (const t of ANALYSIS_THEMES) map.set(t.id, []);
+    map.set('misc', map.get('misc') ?? []);
+    for (const item of items) {
+      const themeId = item.theme && map.has(item.theme) ? item.theme : 'misc';
+      map.get(themeId)!.push(item);
+    }
+    return Array.from(map.entries()).filter(([, arr]) => arr.length > 0);
+  }, [items]);
+
+  // Collapse only "misc" by default; everything else expanded so the user
+  // sees the structure on first render.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => ({ misc: true }));
+
+  if (buckets.length === 0) return null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {buckets.map(([themeId, themeItems]) => {
+        const isCollapsed = !!collapsed[themeId];
+        return (
+          <section key={themeId} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <button
+              type="button"
+              onClick={() => setCollapsed((prev) => ({ ...prev, [themeId]: !prev[themeId] }))}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.5rem 0.75rem',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: '1px solid #e5e5e5',
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontSize: '1rem',
+                fontWeight: 600,
+                color: '#111',
+              }}
+              aria-expanded={!isCollapsed}
+            >
+              <span style={{ fontFamily: 'monospace', color: '#888', fontSize: '0.875rem', width: '1ch' }}>
+                {isCollapsed ? '▸' : '▾'}
+              </span>
+              <span>{themeLabel(themeId)}</span>
+              <span style={{ marginLeft: 'auto', color: '#888', fontWeight: 400, fontSize: '0.875rem' }}>
+                {themeItems.length} item{themeItems.length === 1 ? '' : 's'}
+              </span>
+            </button>
+            {!isCollapsed && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+                {themeItems.map((item) =>
+                  item.kind === 'standalone' ? (
+                    <StandalonePatternCard
+                      key={`standalone-${themeId}-${item.capability}`}
+                      item={item}
+                      onMemberClick={onMemberClick}
+                    />
+                  ) : (
+                    <ClusterCard
+                      key={`cluster-${themeId}-${item.capability}`}
+                      cluster={item}
+                      onMemberClick={onMemberClick}
+                    />
+                  ),
+                )}
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function AnalysisTab({ onJumpToProject }: Props) {
@@ -403,23 +495,7 @@ export default function AnalysisTab({ onJumpToProject }: Props) {
             onToggle={toggleProject}
             onClear={clearProjects}
           />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-            {visibleClusters.map((item) =>
-              item.kind === 'standalone' ? (
-                <StandalonePatternCard
-                  key={`standalone-${item.capability}`}
-                  item={item}
-                  onMemberClick={onJumpToProject}
-                />
-              ) : (
-                <ClusterCard
-                  key={`cluster-${item.capability}`}
-                  cluster={item}
-                  onMemberClick={onJumpToProject}
-                />
-              ),
-            )}
-          </div>
+          <ThemedAnalysisList items={visibleClusters} onMemberClick={onJumpToProject} />
           {visibleClusters.length === 0 && (
             <p style={{ color: '#888', fontSize: '0.875rem', textAlign: 'center', padding: '2rem 0' }}>
               No clusters match the current filters. Clear search or filter chips to see all.

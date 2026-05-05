@@ -166,6 +166,55 @@ describe('Registry Types', () => {
     expect(RegistrySchema.safeParse(bad).success).toBe(false);
   });
 
+  it('accepts a cluster carrying a theme tag', () => {
+    const registry = {
+      projects: { foo: { path: '/tmp/foo', patterns: { a: 'A', b: 'B' } } },
+      analysis: {
+        generatedAt: '2026-05-04T12:00:00.000Z',
+        registryFingerprint: 'a'.repeat(64),
+        projectFingerprints: { foo: 'b'.repeat(64) },
+        clusters: [
+          {
+            kind: 'cluster',
+            theme: 'ai-llm',
+            capability: 'AI provider routing',
+            description: 'Multi-provider LLM clients',
+            members: [
+              { project: 'foo', patternKey: 'a', summary: 'one' },
+              { project: 'foo', patternKey: 'b', summary: 'two' },
+            ],
+            similarities: 'similar',
+            differences: 'different',
+          },
+        ],
+      },
+    };
+    expect(RegistrySchema.safeParse(registry).success).toBe(true);
+  });
+
+  it('rejects an unknown theme slug', () => {
+    const registry = {
+      projects: { foo: { path: '/tmp/foo', patterns: { a: 'A' } } },
+      analysis: {
+        generatedAt: '2026-05-04T12:00:00.000Z',
+        registryFingerprint: 'a'.repeat(64),
+        projectFingerprints: {},
+        clusters: [
+          {
+            kind: 'standalone',
+            theme: 'not-a-real-theme',
+            capability: 'X',
+            description: 'x',
+            member: { project: 'foo', patternKey: 'a', summary: 's' },
+            rationale: 'r',
+            closestRelative: 'c',
+          },
+        ],
+      },
+    };
+    expect(RegistrySchema.safeParse(registry).success).toBe(false);
+  });
+
   it('rejects a standalone item missing rationale or closestRelative', () => {
     const registry = {
       projects: { foo: { path: '/tmp/foo' } },
