@@ -5,7 +5,6 @@ import StandalonePatternCard from './StandalonePatternCard';
 import AnalysisToolbar, { type SortMode } from './AnalysisToolbar';
 import ProjectFilterChips from './ProjectFilterChips';
 import ProviderPicker, { type ProviderId, type ProviderInfo, type RunMode } from './ProviderPicker';
-import AnalysisRunTimeline, { emptyAgentStates, type AgentName, type AgentState } from './AnalysisRunTimeline';
 
 type ClusterMember = { project: string; patternKey: string; summary: string };
 type Cluster = {
@@ -141,9 +140,6 @@ export default function AnalysisTab({ onJumpToProject }: Props) {
   const [elapsedSec, setElapsedSec] = useState(0);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const [agentStates, setAgentStates] = useState<Record<AgentName, AgentState>>(emptyAgentStates());
-  const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(
     () => (typeof window !== 'undefined' ? (localStorage.getItem('reuse:provider') as ProviderId | null) : null),
   );
@@ -208,19 +204,7 @@ export default function AnalysisTab({ onJumpToProject }: Props) {
     fetchProviders();
   }, []);
 
-  const stopAnalysis = async () => {
-    eventSourceRef.current?.close();
-    eventSourceRef.current = null;
-    try { await fetch('/api/analysis/cancel', { method: 'POST' }); } catch { /* ignore */ }
-    abortControllerRef.current?.abort();
-    if (elapsedTimerRef.current) {
-      clearInterval(elapsedTimerRef.current);
-      elapsedTimerRef.current = null;
-    }
-    setRunning(false);
-  };
-
-  const runAnalysisPipeline = () => {
+  const runAnalysis = async () => {
     if (!selectedProvider || !selectedModel) {
       setError('Pick a provider and model before running.');
       return;
@@ -229,65 +213,62 @@ export default function AnalysisTab({ onJumpToProject }: Props) {
     setError(null);
     setRawOutput(null);
     setElapsedSec(0);
-    setAgentStates(emptyAgentStates());
-    setPipelineError(null);
     const startedAt = Date.now();
     elapsedTimerRef.current = setInterval(() => {
       setElapsedSec(Math.floor((Date.now() - startedAt) / 1000));
     }, 1000);
+    const abort = new AbortController();
+    abortControllerRef.current = abort;
 
-    const params = new URLSearchParams({
-      taggerProvider: selectedProvider,
-      taggerModel: selectedModel,
-      writerProvider: selectedProvider,
-      writerModel: selectedModel,
-      mode: runMode,
-    });
-    const es = new EventSource(`/api/analysis/pipeline?${params}`);
-    eventSourceRef.current = es;
-
-    es.addEventListener('agent-start', (e) => {
-      const ev = JSON.parse((e as MessageEvent).data);
-      setAgentStates((s) => ({ ...s, [ev.agent as AgentName]: { ...s[ev.agent as AgentName], status: 'running', total: ev.total } }));
-    });
-    es.addEventListener('agent-progress', (e) => {
-      const ev = JSON.parse((e as MessageEvent).data);
-      setAgentStates((s) => ({ ...s, [ev.agent as AgentName]: { ...s[ev.agent as AgentName], status: 'running', total: ev.total, done: ev.done, current: ev.current } }));
-    });
-    es.addEventListener('agent-done', (e) => {
-      const ev = JSON.parse((e as MessageEvent).data);
-      setAgentStates((s) => ({ ...s, [ev.agent as AgentName]: { ...s[ev.agent as AgentName], status: 'done', elapsedSec: ev.elapsedSec, meta: ev.meta } }));
-    });
-    es.addEventListener('persisted', (e) => {
-      const ev = JSON.parse((e as MessageEvent).data);
-      setData(ev);
-      es.close();
-      eventSourceRef.current = null;
-      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
-      setRunning(false);
-    });
-    es.addEventListener('error', (e) => {
-      // EventSource emits an Event (not MessageEvent) on transport error.
-      // Server-side errors come through as a typed `error` event with data.
-      const me = e as MessageEvent;
-      let msg = 'Pipeline failed.';
-      if (me.data) {
-        try { msg = JSON.parse(me.data).error || msg; } catch { /* ignore */ }
-      }
-      setPipelineError(msg);
-      setAgentStates((s) => {
-        const next = { ...s };
-        for (const k of Object.keys(next) as AgentName[]) {
-          if (next[k].status === 'running') next[k] = { ...next[k], status: 'error' };
-        }
-        return next;
+    try {
+      const res = await fetch('/api/analysis/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: selectedProvider, model: selectedModel, mode: runMode }),
+        signal: abort.signal,
       });
-      es.close();
-      eventSourceRef.current = null;
-      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+      const json = await res.json();
+      if (!res.ok) {
+        if (json.code === 'CANCELLED') {
+          // Cancellation is not an error — just refresh to show the existing analysis state.
+          await fetchAnalysis();
+          return;
+        }
+        setError(json.error || 'Analysis failed.');
+        if (json.code === 'PROVIDER_NOT_CONFIGURED') {
+          setError(`${json.error}\n\nAdd ${json.envKey} to your .env and restart the server.`);
+        }
+        if (json.code === 'CLAUDE_NOT_FOUND' && json.hint) setError(`${json.error}\n\n${json.hint}`);
+        if (json.code === 'JSON_PARSE_FAILED' && json.rawOutput) setRawOutput(json.rawOutput);
+        return;
+      }
+      setData(json);
+    } catch (err) {
+      // AbortError on the client side fires when the user clicks Stop — treat as cancellation.
+      if (err instanceof Error && (err.name === 'AbortError' || /abort/i.test(err.message))) {
+        await fetchAnalysis();
+        return;
+      }
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (elapsedTimerRef.current) {
+        clearInterval(elapsedTimerRef.current);
+        elapsedTimerRef.current = null;
+      }
+      abortControllerRef.current = null;
       setRunning(false);
-    });
+    }
+  };
 
+  const stopAnalysis = async () => {
+    // Tell the server first so the spawned API call gets aborted server-side,
+    // then abort the client fetch so the UI returns immediately.
+    try {
+      await fetch('/api/analysis/cancel', { method: 'POST' });
+    } catch {
+      /* ignore */
+    }
+    abortControllerRef.current?.abort();
   };
 
   const hasAnalysis = !!data?.analysis;
@@ -337,7 +318,7 @@ export default function AnalysisTab({ onJumpToProject }: Props) {
             <span style={runningPulseStyle} />Stop · {formatElapsed(elapsedSec)}
           </button>
         ) : (
-          <button onClick={runAnalysisPipeline} style={buttonStyle}>
+          <button onClick={runAnalysis} style={buttonStyle}>
             {hasAnalysis ? 'Re-run analysis' : 'Run analysis'}
           </button>
         )}
@@ -360,22 +341,12 @@ export default function AnalysisTab({ onJumpToProject }: Props) {
         hasExistingAnalysis={hasAnalysis}
       />
 
-      {running && (
-        <AnalysisRunTimeline
-          agents={agentStates}
-          errorMsg={pipelineError ?? undefined}
-          onStop={stopAnalysis}
-        />
-      )}
-
-      {!running && (
-        <StalenessBanner
-          hasAnalysis={hasAnalysis}
-          stale={stale}
-          generatedAt={generatedAt}
-          changedProjects={data?.changedProjects}
-        />
-      )}
+      <StalenessBanner
+        hasAnalysis={hasAnalysis}
+        stale={stale}
+        generatedAt={generatedAt}
+        changedProjects={data?.changedProjects}
+      />
 
       {emptyPatternProjects.empty > 0 && (
         <div style={{

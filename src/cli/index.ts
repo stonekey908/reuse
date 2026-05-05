@@ -13,8 +13,6 @@ import {
   runAnalysis,
 } from '../analysis/runner.js';
 import type { Analysis, AnalysisItem } from '../shared/types.js';
-import { backfillTags } from '../analysis/agents/backfill.js';
-import type { ProviderId } from '../analysis/providers/index.js';
 
 const program = new Command();
 
@@ -256,39 +254,6 @@ function runChild(command: string, args: string[], env?: NodeJS.ProcessEnv): Pro
     child.on('close', (code) => resolve(code ?? 1));
   });
 }
-
-program
-  .command('tag-patterns')
-  .description('Tag every pattern in the registry with capability/abstractionLevel/domain via the Tagger agent')
-  .option('-p, --provider <id>', 'Provider id (anthropic | openai | gemini | ollama)', 'anthropic')
-  .option('-m, --model <id>', 'Model id (defaults to provider default)')
-  .option('-c, --concurrency <n>', 'Parallel tagger calls', '4')
-  .option('--force', 'Re-tag patterns even if they already have tags', false)
-  .action(async (opts: { provider: string; model?: string; concurrency: string; force?: boolean }) => {
-    console.log(`\n  Running Tagger across all registered patterns via ${opts.provider}${opts.model ? `/${opts.model}` : ''} (concurrency=${opts.concurrency}${opts.force ? ', force re-tag' : ''})…\n`);
-    const result = await backfillTags({
-      provider: opts.provider as ProviderId,
-      model: opts.model,
-      concurrency: parseInt(opts.concurrency, 10),
-      force: opts.force,
-      onProgress: (p) => {
-        if (p.current) process.stdout.write(`  ${p.tagged}/${p.total} · ${p.current.project}/${p.current.patternKey}\r`);
-      },
-    });
-    console.log('\n');
-    console.log(`  Tagged: ${result.tagged} / ${result.total}`);
-    console.log(`  Already tagged (skipped): ${result.alreadyTagged}`);
-    if (result.errors.length > 0) {
-      console.log(`  Errors: ${result.errors.length}`);
-      for (const e of result.errors.slice(0, 5)) console.log(`    - ${e.project}/${e.patternKey}: ${e.error}`);
-    }
-    if (result.newCanonicalDomains.length > 0) {
-      console.log(`  Newly proposed domains: ${result.newCanonicalDomains.join(', ')}`);
-    }
-    if (result.newCanonicalCapabilities.length > 0) {
-      console.log(`  Newly proposed capabilities: ${result.newCanonicalCapabilities.length} entries (see ~/.reuse/glossary.json)`);
-    }
-  });
 
 program
   .command('eval')
