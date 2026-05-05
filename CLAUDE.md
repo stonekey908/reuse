@@ -57,41 +57,57 @@ with full coverage across all 12 themes; no parse errors, no truncation.
   schema was `Record<string, string>` → Now uses `PatternInputSchema`
   (string | structured object). Restart Claude Code after MCP rebuild for the
   new schema to take effect.
+- **`git filter-repo` refuses second run on same clone** → leaves
+  `.git/filter-repo/already_ran` marker; subsequent invocations prompt
+  interactively and abort under non-tty (`EOFError`) → Pipe `yes Y |` into the
+  command, or delete `.git/filter-repo/`, or run from a fresh `git clone`.
+- **Force-push to `main` blocked by `GH006` "protected branch hook declined"**
+  → Repo has classic branch protection with force-push disabled → Toggle off
+  "Do not allow force pushes" at `https://github.com/stonekey908/reuse/settings/branches`,
+  push, then re-enable. Branch protection rules on `main` only — feature
+  branches can be force-pushed/deleted freely.
+- **Local commit identity is per-clone** → `git config user.email` writes to
+  `.git/config` only, never tracked, never pushed → Set per-repo when working
+  in a fresh clone if you want commits stamped with the noreply alias
+  (`172332572+stonekey908@users.noreply.github.com`).
 
 ## Last Session
 
 **Date:** 2026-05-05
 **Who:** Claude session
 **What was done:**
-- MCP server: structured-pattern schema for `register_project` / `update_project`
-  (accepts string OR `{description, capability, abstractionLevel, domain, fileEvidence}`)
-- Scout improvements: `userFacingScreens` field, scored `suggestedFilesToRead`
-  (NOISE_DIRS demoted, capability folders + screen entry points promoted),
-  9-step `SCOUT_INSTRUCTIONS` with CAPABILITY-WALK and NOT-A-PATTERN steps
-- Scout eval (`scripts/scout-eval.mjs`) — 100% / 98% / 0% across 4 ground-truth repos
-- Per-model `maxOutputTokens` (Sonnet 64k, Opus 32k, GPT-5.x 128k, Gemini 65k)
-- Anthropic provider switched to streaming to clear the 10-minute long-request guard
-- `OutputTruncatedError` propagated from all 4 providers, surfaced in UI as
-  `OUTPUT_TRUNCATED` with hint
-- Prompt OUTPUT BUDGET block (per-field char/sentence caps) so output stays
-  dense without truncating
-- 12 canonical themes (`src/shared/themes.ts`) — empirically grounded against
-  92-pattern registry + cross-referenced with awesome-nodejs / awesome-react /
-  CNCF Cloud Native Landscape
-- Two-level theme tree in Analysis tab with collapsible sections + Expand all /
-  Collapse all toggle
-- README updated for structured patterns, capability-walk scout, three-eval ladder,
-  two-level theme tree
-- Screenshots regenerated with `scripts/capture-screenshots.mjs` (puppeteer-core
-  + DOM-mask), analysis-tab screenshot uses the collapsed view so no project
-  data leaks
-- GitHub repo metadata updated (description + 15 topics) via `gh repo edit`
-- Linear: STO-2180 → Done, STO-2179 → Done, STO-2189 → Canceled (multi-agent
-  reverted; structured-schema piece survived)
+- Repo sanitisation pass — full audit for secrets, leaked paths, personal data.
+  No secrets in tracked files or full git history. `.env` / `.env.local` /
+  `.DS_Store` confirmed never committed; only `.env.example` (placeholders only)
+  is tracked. All `/Users/...` references in tracked files are placeholders or
+  `/Users/test/...` test fixtures.
+- Local commit identity switched to GitHub noreply alias
+  (`git config user.email 172332572+stonekey908@users.noreply.github.com`).
+- Historic email scrub via `git filter-repo --mailmap` —
+  `nicholas.s.elias@gmail.com` → `172332572+stonekey908@users.noreply.github.com`
+  across all refs. Force-pushed rewritten `main` (required temporary disable of
+  branch protection; user re-enabled after).
+- Deleted 5 stale remote feature branches that still held the original email
+  (`feat/STO-2150-analysis-schema-fingerprint`, `feat/STO-2159-analysis-search-nav`,
+  `feat/STO-2160-extract-patterns-eval`, `feat/STO-2161-singleton-schema`,
+  `feat/STO-multi-provider-runner`) — all confirmed merged into main first.
+- Local cleanup: deleted backup branch + tag, expired reflog, ran
+  `git gc --prune=now --aggressive`. Verified: zero refs reachable from any
+  branch carry the real email.
 
 **What's next:**
-- Nothing planned. Project is stable and shipped.
-- If something surfaces: re-open the project in Linear and create a new ticket.
+- Nothing planned. Project remains stable and shipped.
+- If you want to fully scrub the original email from GitHub's internal cache
+  (PR #1 merged-commit cache and the ~90-day GitHub reflog), email
+  `support@github.com` and ask them to purge the cache for `stonekey908/reuse`.
+  Real email may also surface on `api.github.com/users/stonekey908/events`
+  for ~90 days.
+
+**Previous session (2026-05-05 earlier):** structured-pattern MCP schema,
+capability-walk scout + scout eval, per-model `maxOutputTokens`, streaming
+Anthropic provider, `OutputTruncatedError`, 12 canonical themes, two-level
+theme tree in Analysis tab, regenerated screenshots, GitHub repo metadata.
+Tickets: STO-2180 → Done, STO-2179 → Done, STO-2189 → Canceled.
 
 **Branch:** main
 **Blockers:** None
