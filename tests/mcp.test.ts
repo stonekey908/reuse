@@ -180,6 +180,114 @@ A demo of chunked file uploads with retry logic.
     expect(text).toContain('extract_patterns');
   });
 
+  it('register_project accepts structured patterns with capability/level/domain tags', async () => {
+    const { client } = await wireUpClient();
+
+    const newProjectDir = path.join(testDir, 'tagged-register');
+    fs.mkdirSync(newProjectDir, { recursive: true });
+
+    await client.callTool({
+      name: 'register_project',
+      arguments: {
+        name: 'tagged-register',
+        projectPath: newProjectDir,
+        patterns: {
+          'chunked-upload-with-retry': {
+            description: 'Splits file into 2MB chunks with retry.',
+            capability: 'chunked-upload-with-retry',
+            abstractionLevel: 'feature',
+            domain: 'frontend-web',
+            fileEvidence: ['/src/upload/chunked.ts'],
+          },
+        },
+      },
+    });
+
+    const stored = JSON.parse(fs.readFileSync(path.join(testDir, 'registry.json'), 'utf-8'));
+    const p = stored.projects['tagged-register'].patterns['chunked-upload-with-retry'];
+    expect(p.description).toBe('Splits file into 2MB chunks with retry.');
+    expect(p.capability).toBe('chunked-upload-with-retry');
+    expect(p.abstractionLevel).toBe('feature');
+    expect(p.domain).toBe('frontend-web');
+    expect(p.fileEvidence).toEqual(['/src/upload/chunked.ts']);
+  });
+
+  it('update_project accepts structured patterns and replaces tags wholesale', async () => {
+    const { client } = await wireUpClient();
+
+    // Seed an existing tagged pattern via register_project
+    const seedDir = path.join(testDir, 'tagged-update');
+    fs.mkdirSync(seedDir, { recursive: true });
+    await client.callTool({
+      name: 'register_project',
+      arguments: {
+        name: 'tagged-update',
+        projectPath: seedDir,
+        patterns: {
+          foo: {
+            description: 'old desc',
+            capability: 'old-capability',
+            abstractionLevel: 'primitive',
+            domain: 'frontend-web',
+            fileEvidence: ['/old.ts'],
+          },
+        },
+      },
+    });
+
+    // String update preserves existing tags, only swaps description
+    await client.callTool({
+      name: 'update_project',
+      arguments: {
+        name: 'tagged-update',
+        patterns: { foo: 'updated description, no new tags' },
+      },
+    });
+    let stored = JSON.parse(fs.readFileSync(path.join(testDir, 'registry.json'), 'utf-8'));
+    let p = stored.projects['tagged-update'].patterns.foo;
+    expect(p.description).toBe('updated description, no new tags');
+    expect(p.capability).toBe('old-capability');
+    expect(p.fileEvidence).toEqual(['/old.ts']);
+
+    // Structured update replaces tags wholesale
+    await client.callTool({
+      name: 'update_project',
+      arguments: {
+        name: 'tagged-update',
+        patterns: {
+          foo: {
+            description: 'new tagged desc',
+            capability: 'new-capability',
+            abstractionLevel: 'architecture',
+            domain: 'backend-api',
+            fileEvidence: ['/new.ts', '/new.test.ts'],
+          },
+        },
+      },
+    });
+    stored = JSON.parse(fs.readFileSync(path.join(testDir, 'registry.json'), 'utf-8'));
+    p = stored.projects['tagged-update'].patterns.foo;
+    expect(p.capability).toBe('new-capability');
+    expect(p.abstractionLevel).toBe('architecture');
+    expect(p.domain).toBe('backend-api');
+    expect(p.fileEvidence).toEqual(['/new.ts', '/new.test.ts']);
+  });
+
+  it('extract_patterns instructions tell the AI to send structured patterns', async () => {
+    const { client } = await wireUpClient();
+    const result = await client.callTool({
+      name: 'extract_patterns',
+      arguments: { name: 'sample-project' },
+    });
+    const text = (result.content as Array<{ text: string }>)[0].text;
+    const report = JSON.parse(text);
+    const joined: string = report.instructions.join('\n');
+    expect(joined).toContain('capability');
+    expect(joined).toContain('abstractionLevel');
+    expect(joined).toContain('domain');
+    expect(joined).toContain('fileEvidence');
+  });
+
   it('register_project does NOT nudge when patterns are supplied', async () => {
     const { client } = await wireUpClient();
 
