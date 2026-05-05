@@ -45,9 +45,6 @@ The AI will handle cloning, building, and wiring up the MCP config for your spec
 ### AI-assisted code search and reuse commentary
 ![AI searching project code, reading a component, and providing reuse analysis with adaptation steps](docs/screenshots/06-code-search-reuse.png)
 
-### Projects tab — every registered project with tags, patterns, and capability badges
-![Projects tab showing project cards with metadata, tags, and pattern lists. Project names masked to project-a through project-h.](docs/screenshots/10-projects-tab.png)
-
 ### Analysis tab — two-level theme tree, collapsible per section
 ![Analysis tab showing 12 collapsible theme sections (AI & LLM, UI components, Data storage, Cloud functions, State & background, Realtime & messaging, Image & media, Dev tooling, Distribution & CLI, Testing, Documentation, Observability) with item counts and an Expand all toggle.](docs/screenshots/12-analysis-themes-collapsed.png)
 
