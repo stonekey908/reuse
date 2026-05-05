@@ -19,7 +19,6 @@ import {
   ContextWindowExceededError,
   type ProviderId,
 } from '../analysis/providers/index.js';
-import { runPipeline, type PipelineEvent } from '../analysis/pipeline.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -119,80 +118,6 @@ export function createApp(options: CreateAppOptions = {}): Express {
 
   // Track the in-flight analysis run so the user can cancel it from the UI.
   let inFlight: { abort: AbortController; startedAt: number } | null = null;
-
-  app.get('/api/analysis/pipeline', async (req, res) => {
-    if (inFlight) {
-      res.status(409).json({ error: 'A run is already in flight.', code: 'RUN_IN_FLIGHT' });
-      return;
-    }
-    const taggerProvider = (req.query.taggerProvider as ProviderId) || 'anthropic';
-    const taggerModel = (req.query.taggerModel as string) || 'claude-sonnet-4-6';
-    const writerProvider = (req.query.writerProvider as ProviderId) || taggerProvider;
-    const writerModel = (req.query.writerModel as string) || 'claude-sonnet-4-6';
-    const mode = req.query.mode === 'append' ? 'append' : 'reset';
-    const forceTag = req.query.forceTag === '1';
-
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders?.();
-
-    const send = (event: PipelineEvent) => {
-      res.write(`event: ${event.type}\n`);
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
-    };
-
-    const started = Date.now();
-    const abort = new AbortController();
-    inFlight = { abort, startedAt: started };
-    const onClientClose = () => {
-      if (!abort.signal.aborted) {
-        abort.abort();
-        console.log(`[pipeline] client disconnected — aborted`);
-      }
-    };
-    req.on('close', onClientClose);
-
-    try {
-      const registry = loadRegistry();
-      console.log(`[pipeline] starting tagger=${taggerProvider}/${taggerModel} writer=${writerProvider}/${writerModel} mode=${mode}`);
-      const items = await runPipeline({
-        registry,
-        taggerProvider,
-        taggerModel,
-        writerProvider,
-        writerModel,
-        forceTag,
-        signal: abort.signal,
-        onEvent: send,
-      });
-      // Persist
-      const fresh = loadRegistry(); // reload because tagger/normalizer wrote
-      const updated = writeAnalysis(fresh, items, mode);
-      const staleness = getStaleness(updated);
-      const elapsedSec = Math.round((Date.now() - started) / 1000);
-      console.log(`[pipeline] done in ${elapsedSec}s — ${items.length} items`);
-      send({ type: 'agent-done', agent: 'writer', elapsedSec, meta: { itemCount: items.length, finalised: true } });
-      res.write(`event: persisted\n`);
-      res.write(`data: ${JSON.stringify({ analysis: updated.analysis, stale: staleness.stale, changedProjects: staleness.changedProjects })}\n\n`);
-      res.end();
-    } catch (err) {
-      const isAbort = abort.signal.aborted ||
-        (err instanceof Error && (err.name === 'AbortError' || /aborted|cancelled|canceled/i.test(err.message)));
-      const elapsed = Math.round((Date.now() - started) / 1000);
-      if (isAbort) {
-        console.log(`[pipeline] cancelled after ${elapsed}s`);
-        send({ type: 'error', error: 'Cancelled by user.' });
-      } else {
-        console.log(`[pipeline] failed after ${elapsed}s — ${err instanceof Error ? err.message : String(err)}`);
-        send({ type: 'error', error: err instanceof Error ? err.message : String(err) });
-      }
-      res.end();
-    } finally {
-      req.off('close', onClientClose);
-      inFlight = null;
-    }
-  });
 
   app.post('/api/analysis/cancel', (_req, res) => {
     if (!inFlight) {
