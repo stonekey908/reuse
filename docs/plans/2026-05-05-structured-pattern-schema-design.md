@@ -71,6 +71,21 @@ Based on inventory of the user's actual 70 patterns:
 
 This is a **starter set** stored in `src/analysis/glossary.ts`. The AI may propose new domain slugs; the glossary tracks them and lets the user merge synonyms.
 
+### How the glossary stays stable (no domain spiralling)
+
+A single concrete rule keeps domain/capability slugs from drifting:
+
+1. **Tagger never sees its own previous proposals.** Each tagger call has only the persisted canonical list as context.
+2. **Tagger may propose ONE new domain or capability slug** per pattern, with a ≤16-word justification. It picks from the canonical list otherwise.
+3. **Glossary Normalizer runs ONCE per analyze run** with the full set of proposals across all patterns. It decides each:
+   - merge into an existing canonical slug (e.g. `pwa-companion` → `frontend-web` when too narrow);
+   - accept as a new canonical (e.g. `pwa-companion` becomes official if multiple unrelated patterns proposed it);
+   - reject as noise (project-specific or one-off slugs).
+4. **Normalizer output persists** to `~/.reuse/glossary.json`. The next run's Tagger starts from this consolidated list.
+5. **User can hand-edit `~/.reuse/glossary.json`** if they disagree with a Normalizer choice. Plain-file authority.
+
+Result: the canonical list grows slowly, by deliberate consolidation, and never proliferates synonyms.
+
 ### Layer 2 — deterministic grouping + glossary
 
 `analyze_patterns` no longer asks an LLM to cluster. It:
