@@ -22,8 +22,8 @@ const validResponse = JSON.stringify({ clusters: sampleClusters });
 
 const baseRegistry: Registry = {
   projects: {
-    foo: { path: '/tmp/foo', patterns: { upload: 'queue with retry' } },
-    bar: { path: '/tmp/bar', patterns: { state: 'XState flow' } },
+    foo: { path: '/tmp/foo', patterns: { upload: { description: 'queue with retry', fileEvidence: [] } } },
+    bar: { path: '/tmp/bar', patterns: { state: { description: 'XState flow', fileEvidence: [] } } },
   },
 };
 
@@ -103,7 +103,7 @@ describe('analysis endpoints', () => {
       const modified: Registry = {
         projects: {
           ...baseRegistry.projects,
-          foo: { path: '/tmp/foo', patterns: { upload: 'totally different now' } },
+          foo: { path: '/tmp/foo', patterns: { upload: { description: 'totally different now', fileEvidence: [] } } },
         },
       };
       saveRegistry({ ...modified, analysis: JSON.parse(fs.readFileSync(path.join(testDir, 'registry.json'), 'utf-8')).analysis });

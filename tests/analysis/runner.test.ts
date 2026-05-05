@@ -25,7 +25,7 @@ const validResponse = JSON.stringify({
 
 const registry: Registry = {
   projects: {
-    foo: { path: '/tmp/foo', patterns: { 'upload-flow': 'Visible queue with retry' } },
+    foo: { path: '/tmp/foo', patterns: { 'upload-flow': { description: 'Visible queue with retry', fileEvidence: [] } } },
   },
 };
 

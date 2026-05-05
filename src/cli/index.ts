@@ -39,7 +39,10 @@ program
       if (project.description) console.log(`    Desc: ${project.description}`);
       if (project.tags?.length) console.log(`    Tags: ${project.tags.join(', ')}`);
       if (project.patterns && Object.keys(project.patterns).length > 0) {
-        console.log(`    Patterns: ${Object.keys(project.patterns).join(', ')}`);
+        const taggedCount = Object.values(project.patterns).filter((p) => p.capability).length;
+        const total = Object.keys(project.patterns).length;
+        const tagSuffix = taggedCount > 0 ? `  (${taggedCount}/${total} tagged)` : '';
+        console.log(`    Patterns: ${Object.keys(project.patterns).join(', ')}${tagSuffix}`);
       }
       if (project.git) console.log(`    Git:  ${project.git}`);
     }
@@ -148,7 +151,7 @@ program
     }
 
     if (!project.patterns) project.patterns = {};
-    project.patterns[key] = description;
+    project.patterns[key] = { description, fileEvidence: [] };
 
     saveRegistry(registry);
     console.log(`Pattern "${key}" added to "${name}".`);
