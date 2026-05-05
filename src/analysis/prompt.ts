@@ -44,7 +44,12 @@ ${priorClusters.map((c) => `  - "${c.capability}" (${c.kind === 'standalone' ? '
 
   const themesList = ANALYSIS_THEMES.map((t) => `  - "${t.id}" (${t.label}) — ${t.description}`).join('\n');
 
-  return `You are clustering reusable software patterns across a developer's project registry. Your job is to group patterns by capability and explain in plain English where members are alike and where they diverge, so the developer can spot consolidation opportunities.
+  return `You are clustering reusable software patterns across a developer's project registry into a TWO-LEVEL TREE so a human can scan the analysis quickly:
+
+  Level 1 — THEME (top-level functional area, e.g. "AI & LLM", "UI components & interaction"). Required on every item. Pick from the canonical list below.
+  Level 2 — CAPABILITY CLUSTER or STANDALONE (e.g. "Document upload", "Reusable modal shell"). Each level-2 item belongs to exactly one theme.
+
+The UI renders themes as collapsible sections. If you skip the theme field, the user sees a flat 50-item scroll instead of an organised tree — that's the failure mode to avoid.
 
 ${priorSection}Current patterns (${patterns.length} patterns across ${projectCount} projects):
 ${patternsList}
@@ -61,8 +66,26 @@ OUTPUT BUDGET (read first):
 TOP-LEVEL THEMES (every cluster and standalone MUST be tagged with exactly one):
 ${themesList}
 
+WORKED EXAMPLE of the two-level shape:
+
+  Theme: "ai-llm"
+    Cluster: "AI provider routing"          [members from project-a, project-b, project-c]
+    Cluster: "Prompt libraries"              [members from project-a, project-d]
+    Standalone: "AI clarification loop"      [single member from project-b]
+  Theme: "data-storage-sync"
+    Cluster: "Encrypted local storage"       [members from project-a, project-c]
+    Standalone: "Storage mutex"              [single member from project-a]
+  Theme: "ui-components"
+    Cluster: "Reusable modal shells"         [members from project-a, project-b, project-d]
+
+Notice:
+  - Capability names are HUMAN PHRASES ("AI provider routing"), NOT slugs ("ai-provider-routing"). Title-case-ish, ≤4 words. Slug-y names are a fail.
+  - Themes contain MULTIPLE clusters. If a theme has only 1 item, suspect over-splitting — could two of your standalones merge?
+  - A theme with >8 items means clusters are too granular for that area — merge related ones (e.g. "Multi-provider routing" + "Prompt construction" + "Tool registry" might collapse into "AI provider integration").
+
 Rules:
-- Every output item (cluster or standalone) MUST include a \`theme\` field whose value is one of the slugs above. The UI groups items into collapsible sections by theme, so this assignment determines where each cluster shows up. Pick the theme that best describes the FUNCTIONAL CAPABILITY area, not the implementation domain. When multiple themes plausibly fit, choose the one a user looking for "where do I keep my X" would scan first. Use "misc" only when nothing else applies.
+- Every output item (cluster or standalone) MUST include a \`theme\` field whose value is one of the slugs above. Items without a \`theme\` are buggy output — do not emit them. The UI groups items into collapsible sections by theme; this assignment determines structure. Pick the theme that best describes the FUNCTIONAL CAPABILITY area, not the implementation domain. Use "misc" only when nothing else applies.
+- \`capability\` field values must be HUMAN-READABLE phrases (e.g. "Document upload", "Encrypted local storage", "Reusable modal shell") — NEVER kebab-case slugs like "document-upload" or "encrypted-local-storage". Title case the first word; keep ≤4 words; describe the user-facing capability not the implementation strategy.
 - Each pattern joins exactly one item — either a multi-member cluster or a standalone pattern.
 - Reuse a previous item's name when the meaning still applies. Drop items whose patterns are gone.
 - **There are TWO output shapes**, distinguished by a "kind" field:
