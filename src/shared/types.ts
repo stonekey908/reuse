@@ -1,10 +1,32 @@
 import { z } from 'zod';
 
+export const ABSTRACTION_LEVELS = ['primitive', 'feature', 'discipline', 'architecture', 'spec'] as const;
+
+const PatternBodySchema = z.object({
+  description: z.string().describe('1-2 sentence prose describing the pattern'),
+  capability: z.string().optional().describe('Free-form kebab-case slug naming the capability (e.g. "document-upload")'),
+  abstractionLevel: z.enum(ABSTRACTION_LEVELS).optional().describe('Reusability layer this pattern operates at'),
+  domain: z.string().optional().describe('Broad area (frontend-web, ai-integration, etc.) — see glossary for canonical list'),
+  fileEvidence: z.array(z.string()).optional().default([]).describe('File paths from the project that demonstrate this pattern'),
+}).passthrough();
+
+/**
+ * Pattern records are tolerant of two shapes on input:
+ * - Legacy: a plain string (the description). Auto-upgraded via z.preprocess.
+ * - New: a structured object with optional capability/abstractionLevel/domain tags.
+ *
+ * After parse, every pattern is in the structured object form.
+ */
+export const PatternRecordSchema = z.preprocess(
+  (val) => (typeof val === 'string' ? { description: val, fileEvidence: [] } : val),
+  PatternBodySchema,
+);
+
 export const ProjectSchema = z.object({
   path: z.string().describe('Absolute path to the project directory'),
   description: z.string().optional().default('').describe('Human-readable project description'),
   tags: z.array(z.string()).optional().default([]).describe('Searchable tags'),
-  patterns: z.record(z.string(), z.string()).optional().default({}).describe('Named patterns with descriptions'),
+  patterns: z.record(z.string(), PatternRecordSchema).optional().default({}).describe('Named patterns with structured tags'),
   git: z.string().optional().describe('Git remote URL'),
   links: z.record(z.string(), z.string()).optional().default({}).describe('External links (linear, figma, notion, etc.)'),
 }).passthrough();
@@ -23,6 +45,8 @@ export const ClusterSchema = z.object({
   similarities: z.string().describe('Natural-language description of what cluster members share'),
   differences: z.string().describe('Natural-language description of how cluster members diverge'),
   consolidationNote: z.string().optional().describe('Optional reuse / consolidation suggestion'),
+  provider: z.string().optional().describe('Provider that produced this item (anthropic, openai, gemini, ollama)'),
+  model: z.string().optional().describe('Model id that produced this item'),
 });
 
 export const StandalonePatternSchema = z.object({
@@ -33,6 +57,8 @@ export const StandalonePatternSchema = z.object({
   rationale: z.string().describe('Why this pattern stands alone — what makes it its own category'),
   closestRelative: z.string().describe('The nearest related pattern in the registry and why it does not fit'),
   notes: z.string().optional().describe('Optional extra notes'),
+  provider: z.string().optional().describe('Provider that produced this item (anthropic, openai, gemini, ollama)'),
+  model: z.string().optional().describe('Model id that produced this item'),
 });
 
 export const AnalysisItemSchema = z.union([StandalonePatternSchema, ClusterSchema]);
@@ -56,6 +82,21 @@ export type Cluster = z.infer<typeof ClusterSchema>;
 export type StandalonePattern = z.infer<typeof StandalonePatternSchema>;
 export type AnalysisItem = z.infer<typeof AnalysisItemSchema>;
 export type ClusterMember = z.infer<typeof ClusterMemberSchema>;
+export type Pattern = z.infer<typeof PatternBodySchema>;
+export type AbstractionLevel = (typeof ABSTRACTION_LEVELS)[number];
+
+/**
+ * Returns the description of a pattern record. Patterns parsed via PatternRecordSchema
+ * are always in object form, so this is just `p.description` — but exporting it here
+ * lets call sites express intent without reaching into the type.
+ */
+export function patternDescription(p: Pattern): string {
+  return p.description;
+}
+
+export function patternHasTags(p: Pattern): boolean {
+  return !!(p.capability && p.abstractionLevel && p.domain);
+}
 
 export function isStandalone(item: AnalysisItem): item is StandalonePattern {
   return item.kind === 'standalone';

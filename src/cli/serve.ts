@@ -10,8 +10,15 @@ import {
   JsonParseError,
   defaultClaudeRunner,
   runAnalysis,
+  runnerFromProvider,
   type ClaudeRunner,
 } from '../analysis/runner.js';
+import {
+  listProviders,
+  ProviderNotConfiguredError,
+  ContextWindowExceededError,
+  type ProviderId,
+} from '../analysis/providers/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -100,26 +107,102 @@ export function createApp(options: CreateAppOptions = {}): Express {
     });
   });
 
-  app.post('/api/analysis/run', async (_req, res) => {
+  app.get('/api/providers', async (_req, res) => {
+    try {
+      const infos = await listProviders();
+      res.json({ providers: infos });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // Track the in-flight analysis run so the user can cancel it from the UI.
+  let inFlight: { abort: AbortController; startedAt: number } | null = null;
+
+  app.post('/api/analysis/cancel', (_req, res) => {
+    if (!inFlight) {
+      res.status(404).json({ error: 'No analysis run in flight.' });
+      return;
+    }
+    const elapsed = Math.round((Date.now() - inFlight.startedAt) / 1000);
+    inFlight.abort.abort();
+    console.log(`[analysis] cancel requested after ${elapsed}s`);
+    res.json({ ok: true, elapsedSec: elapsed });
+  });
+
+  app.get('/api/analysis/status', (_req, res) => {
+    res.json({
+      running: !!inFlight,
+      elapsedSec: inFlight ? Math.round((Date.now() - inFlight.startedAt) / 1000) : 0,
+    });
+  });
+
+  app.post('/api/analysis/run', async (req, res) => {
+    if (inFlight) {
+      res.status(409).json({ error: 'An analysis run is already in flight. Cancel it first or wait for it to finish.', code: 'RUN_IN_FLIGHT' });
+      return;
+    }
     const started = Date.now();
+    const abort = new AbortController();
+    inFlight = { abort, startedAt: started };
+    const body = (req.body ?? {}) as {
+      provider?: ProviderId;
+      model?: string;
+      mode?: 'reset' | 'append';
+    };
+    const mode = body.mode === 'append' ? 'append' : 'reset';
     try {
       const registry = loadRegistry();
       const patternCount = Object.values(registry.projects).reduce(
         (sum, p) => sum + Object.keys(p.patterns ?? {}).length,
         0,
       );
-      console.log(`[analysis] starting run — ${patternCount} patterns across ${Object.keys(registry.projects).length} projects (typically 3–6 min)`);
-      const clusters = await runAnalysis({ registry, runner });
-      const updated = writeAnalysis(registry, clusters);
+
+      // Pick runner: explicit provider/model from request, else fall back to default (Anthropic).
+      let chosenRunner: ClaudeRunner = runner;
+      let providerLabel = 'default';
+      if (body.provider) {
+        chosenRunner = await runnerFromProvider(body.provider, body.model, abort.signal);
+        providerLabel = `${body.provider}${body.model ? `/${body.model}` : ''}`;
+      }
+
+      console.log(`[analysis] starting run — ${patternCount} patterns across ${Object.keys(registry.projects).length} projects · ${providerLabel} · mode=${mode}`);
+      const clusters = await runAnalysis({
+        registry,
+        runner: chosenRunner,
+        tag: body.provider ? { provider: body.provider, model: body.model || 'default' } : undefined,
+      });
+      const updated = writeAnalysis(registry, clusters, mode);
       const staleness = getStaleness(updated);
-      console.log(`[analysis] done in ${Math.round((Date.now() - started) / 1000)}s — ${clusters.length} clusters`);
+      console.log(`[analysis] done in ${Math.round((Date.now() - started) / 1000)}s — ${clusters.length} new items (${updated.analysis!.clusters.length} total in cache)`);
       res.json({
         analysis: updated.analysis,
         stale: staleness.stale,
         changedProjects: staleness.changedProjects,
       });
     } catch (err) {
-      console.log(`[analysis] failed after ${Math.round((Date.now() - started) / 1000)}s — ${err instanceof Error ? err.message : String(err)}`);
+      const elapsed = Math.round((Date.now() - started) / 1000);
+      const isAbort = abort.signal.aborted ||
+        (err instanceof Error && (err.name === 'AbortError' || /aborted|cancelled|canceled/i.test(err.message)));
+      if (isAbort) {
+        console.log(`[analysis] cancelled after ${elapsed}s`);
+        res.status(499).json({ error: 'Analysis cancelled by user.', code: 'CANCELLED', elapsedSec: elapsed });
+        return;
+      }
+      console.log(`[analysis] failed after ${elapsed}s — ${err instanceof Error ? err.message : String(err)}`);
+      if (err instanceof ProviderNotConfiguredError) {
+        res.status(400).json({
+          error: err.message,
+          code: 'PROVIDER_NOT_CONFIGURED',
+          provider: err.provider,
+          envKey: err.envKey,
+        });
+        return;
+      }
+      if (err instanceof ContextWindowExceededError) {
+        res.status(400).json({ error: err.message, code: 'CONTEXT_WINDOW_EXCEEDED' });
+        return;
+      }
       if (err instanceof ClaudeNotFoundError) {
         res.status(500).json({
           error: err.message,
@@ -138,6 +221,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
       }
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message, code: 'ANALYSIS_FAILED' });
+    } finally {
+      inFlight = null;
     }
   });
 

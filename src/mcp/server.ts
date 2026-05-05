@@ -377,11 +377,19 @@ export function createReuseServer(options: CreateReuseServerOptions = {}): McpSe
         } catch { /* no git remote */ }
       }
 
+      // Strings come in via the MCP tool's argv schema; upgrade each to the
+      // structured Pattern shape at write time. Tags can be added later via
+      // the (forthcoming) Tagger agent or update_project.
+      const upgradedPatterns: Record<string, { description: string; fileEvidence: string[] }> = {};
+      for (const [k, v] of Object.entries(patterns || {})) {
+        upgradedPatterns[k] = { description: v, fileEvidence: [] };
+      }
+
       registry.projects[name] = {
         path: projectPath,
         description: description || '',
         tags: tags || [],
-        patterns: patterns || {},
+        patterns: upgradedPatterns,
         git: gitUrl,
         links: links || {},
       };
@@ -423,7 +431,16 @@ export function createReuseServer(options: CreateReuseServerOptions = {}): McpSe
 
       if (description !== undefined) project.description = description;
       if (tags !== undefined) project.tags = tags;
-      if (patterns !== undefined) project.patterns = { ...project.patterns, ...patterns };
+      if (patterns !== undefined) {
+        // Upgrade each incoming string to structured Pattern. If the key already
+        // exists (carrying tags), preserve those tags and only update the description.
+        const merged = { ...project.patterns };
+        for (const [k, v] of Object.entries(patterns)) {
+          const existing = merged[k];
+          merged[k] = { ...(existing ?? { fileEvidence: [] }), description: v };
+        }
+        project.patterns = merged;
+      }
       if (git !== undefined) project.git = git;
       if (links !== undefined) project.links = { ...project.links, ...links };
 
