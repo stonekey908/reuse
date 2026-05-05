@@ -1,4 +1,5 @@
 import type { AnalysisItem, Registry } from '../shared/types.js';
+import { ANALYSIS_THEMES } from '../shared/themes.js';
 
 export type PatternEntry = {
   project: string;
@@ -41,6 +42,8 @@ ${priorClusters.map((c) => `  - "${c.capability}" (${c.kind === 'standalone' ? '
     ? '\n\nIMPORTANT: Return ONLY the raw JSON object — no markdown fences, no prose, no commentary. The first character must be `{` and the last must be `}`.'
     : '';
 
+  const themesList = ANALYSIS_THEMES.map((t) => `  - "${t.id}" (${t.label}) — ${t.description}`).join('\n');
+
   return `You are clustering reusable software patterns across a developer's project registry. Your job is to group patterns by capability and explain in plain English where members are alike and where they diverge, so the developer can spot consolidation opportunities.
 
 ${priorSection}Current patterns (${patterns.length} patterns across ${projectCount} projects):
@@ -55,7 +58,11 @@ OUTPUT BUDGET (read first):
 - \`consolidationNote\` (optional): ≤ 200 chars, ending with the effort/payoff parenthetical.
 - DO NOT enumerate every micro-difference between members. Pick the ONE axis that matters and say it.
 
+TOP-LEVEL THEMES (every cluster and standalone MUST be tagged with exactly one):
+${themesList}
+
 Rules:
+- Every output item (cluster or standalone) MUST include a \`theme\` field whose value is one of the slugs above. The UI groups items into collapsible sections by theme, so this assignment determines where each cluster shows up. Pick the theme that best describes the FUNCTIONAL CAPABILITY area, not the implementation domain. When multiple themes plausibly fit, choose the one a user looking for "where do I keep my X" would scan first. Use "misc" only when nothing else applies.
 - Each pattern joins exactly one item — either a multi-member cluster or a standalone pattern.
 - Reuse a previous item's name when the meaning still applies. Drop items whose patterns are gone.
 - **There are TWO output shapes**, distinguished by a "kind" field:
@@ -80,6 +87,7 @@ Return strict JSON matching exactly this shape (the array can mix both kinds):
   "clusters": [
     {
       "kind": "cluster",
+      "theme": "string — required; one of the theme slugs listed above (e.g. 'ai-llm')",
       "capability": "string — short capability name like 'Document upload'",
       "description": "string — one-line summary of what unites this cluster",
       "members": [
@@ -91,6 +99,7 @@ Return strict JSON matching exactly this shape (the array can mix both kinds):
     },
     {
       "kind": "standalone",
+      "theme": "string — required; one of the theme slugs listed above",
       "capability": "string — short capability name",
       "description": "string — one-line summary of what this pattern does",
       "member": { "project": "project name", "patternKey": "pattern key", "summary": "1-line summary" },

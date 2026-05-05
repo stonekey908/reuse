@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ANALYSIS_THEME_IDS } from './themes.js';
 
 export const ABSTRACTION_LEVELS = ['primitive', 'feature', 'discipline', 'architecture', 'spec'] as const;
 
@@ -39,6 +40,7 @@ export const ClusterMemberSchema = z.object({
 
 export const ClusterSchema = z.object({
   kind: z.literal('cluster').optional().describe('Discriminator; absence implies "cluster" for back-compat with legacy caches'),
+  theme: z.enum(ANALYSIS_THEME_IDS as unknown as [string, ...string[]]).optional().describe('Top-level grouping theme (e.g. "ai-llm", "data-storage-sync")'),
   capability: z.string().describe('Cluster name, e.g. "Document upload"'),
   description: z.string().describe('One-line summary of the cluster'),
   members: z.array(ClusterMemberSchema),
@@ -51,6 +53,7 @@ export const ClusterSchema = z.object({
 
 export const StandalonePatternSchema = z.object({
   kind: z.literal('standalone').describe('Discriminator'),
+  theme: z.enum(ANALYSIS_THEME_IDS as unknown as [string, ...string[]]).optional().describe('Top-level grouping theme (e.g. "ai-llm", "data-storage-sync")'),
   capability: z.string().describe('Capability name as standalone'),
   description: z.string().describe('One-line summary of what this pattern does'),
   member: ClusterMemberSchema.describe('The single pattern this entry represents'),
