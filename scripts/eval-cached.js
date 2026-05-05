@@ -31,9 +31,10 @@ function pickJudgeProvider() {
   const argProvider = process.env.REUSE_JUDGE_PROVIDER;
   const argModel = process.env.REUSE_JUDGE_MODEL;
   if (argProvider && argModel) return { provider: argProvider, model: argModel };
-  if (process.env.ANTHROPIC_API_KEY) return { provider: 'anthropic', model: 'claude-sonnet-4-6' };
-  if (process.env.OPENAI_API_KEY) return { provider: 'openai', model: 'gpt-5.4' };
-  if (process.env.GOOGLE_API_KEY) return { provider: 'gemini', model: 'gemini-2.5-pro' };
+  // Default to strongest available judge so the rubric scores are reliable.
+  if (process.env.ANTHROPIC_API_KEY) return { provider: 'anthropic', model: 'claude-opus-4-7' };
+  if (process.env.GOOGLE_API_KEY) return { provider: 'gemini', model: 'gemini-3.1-pro-preview' };
+  if (process.env.OPENAI_API_KEY) return { provider: 'openai', model: 'gpt-5.5' };
   return { provider: 'ollama', model: 'qwen2.5-coder:14b' };
 }
 
