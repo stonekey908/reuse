@@ -12,7 +12,7 @@ export function collectPatterns(registry: Registry): PatternEntry[] {
     const project = registry.projects[name];
     const patterns = project.patterns ?? {};
     for (const key of Object.keys(patterns).sort()) {
-      out.push({ project: name, key, description: patterns[key] });
+      out.push({ project: name, key, description: patterns[key].description });
     }
   }
   return out;

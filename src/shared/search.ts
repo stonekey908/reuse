@@ -26,8 +26,8 @@ export function searchProjects(registry: Registry, query: string): SearchResult[
     }
 
     if (project.patterns) {
-      for (const [patternName, patternDesc] of Object.entries(project.patterns)) {
-        if (patternName.toLowerCase().includes(q) || patternDesc.toLowerCase().includes(q)) {
+      for (const [patternName, pattern] of Object.entries(project.patterns)) {
+        if (patternName.toLowerCase().includes(q) || pattern.description.toLowerCase().includes(q)) {
           matchedOn.push(`pattern:${patternName}`);
         }
       }

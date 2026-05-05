@@ -116,6 +116,56 @@ describe('Registry Types', () => {
     expect(RegistrySchema.safeParse(registry).success).toBe(true);
   });
 
+  it('auto-upgrades legacy string-shape patterns to the structured Pattern object', () => {
+    // A registry written by the OLD code uses `patterns: Record<string, string>`.
+    // The schema's z.preprocess wraps each string into the structured Pattern shape.
+    const legacy = {
+      projects: {
+        foo: { path: '/tmp/foo', patterns: { 'auth-flow': 'JWT auth' } },
+      },
+    };
+    const parsed = RegistrySchema.parse(legacy);
+    const pattern = parsed.projects.foo.patterns?.['auth-flow'];
+    expect(pattern).toBeDefined();
+    expect(pattern!.description).toBe('JWT auth');
+    expect(pattern!.fileEvidence).toEqual([]);
+    expect(pattern!.capability).toBeUndefined();
+  });
+
+  it('accepts the new structured Pattern shape with capability tags', () => {
+    const tagged = {
+      projects: {
+        foo: {
+          path: '/tmp/foo',
+          patterns: {
+            'auth-flow': {
+              description: 'JWT auth',
+              capability: 'authentication',
+              abstractionLevel: 'feature',
+              domain: 'frontend-web',
+              fileEvidence: ['/src/auth.ts'],
+            },
+          },
+        },
+      },
+    };
+    const parsed = RegistrySchema.parse(tagged);
+    const pattern = parsed.projects.foo.patterns?.['auth-flow'];
+    expect(pattern?.capability).toBe('authentication');
+    expect(pattern?.abstractionLevel).toBe('feature');
+    expect(pattern?.domain).toBe('frontend-web');
+    expect(pattern?.fileEvidence).toEqual(['/src/auth.ts']);
+  });
+
+  it('rejects a Pattern with an unknown abstractionLevel', () => {
+    const bad = {
+      projects: {
+        foo: { path: '/tmp/foo', patterns: { x: { description: 'x', abstractionLevel: 'bogus' } } },
+      },
+    };
+    expect(RegistrySchema.safeParse(bad).success).toBe(false);
+  });
+
   it('rejects a standalone item missing rationale or closestRelative', () => {
     const registry = {
       projects: { foo: { path: '/tmp/foo' } },
