@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import {
   ContextWindowExceededError,
+  OutputTruncatedError,
   ProviderNotConfiguredError,
   type CompleteOptions,
   type Provider,
@@ -40,13 +41,20 @@ export function buildOpenAIProvider(): Provider {
     const response = await client.chat.completions.create(
       {
         model: modelId,
+        // Headroom for ~100-pattern clusters; OpenAI silently caps at the
+        // model's max output budget if this is too high.
+        max_completion_tokens: 32_000,
         messages: [{ role: 'user', content: prompt }],
       },
       { signal: opts.signal },
     );
 
-    const text = response.choices[0]?.message?.content;
-    if (!text) throw new Error(`OpenAI returned no content. Finish reason: ${response.choices[0]?.finish_reason}`);
+    const choice = response.choices[0];
+    const text = choice?.message?.content;
+    if (!text) throw new Error(`OpenAI returned no content. Finish reason: ${choice?.finish_reason}`);
+    if (choice?.finish_reason === 'length') {
+      throw new OutputTruncatedError('openai', modelId, text.length, text);
+    }
     return text;
   };
 

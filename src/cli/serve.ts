@@ -17,6 +17,7 @@ import {
   listProviders,
   ProviderNotConfiguredError,
   ContextWindowExceededError,
+  OutputTruncatedError,
   type ProviderId,
 } from '../analysis/providers/index.js';
 
@@ -201,6 +202,17 @@ export function createApp(options: CreateAppOptions = {}): Express {
       }
       if (err instanceof ContextWindowExceededError) {
         res.status(400).json({ error: err.message, code: 'CONTEXT_WINDOW_EXCEEDED' });
+        return;
+      }
+      if (err instanceof OutputTruncatedError) {
+        res.status(502).json({
+          error: err.message,
+          code: 'OUTPUT_TRUNCATED',
+          provider: err.provider,
+          model: err.model,
+          partial: err.partial,
+          hint: 'The model hit its output-token cap before finishing the JSON. Try a model with a larger output budget (Sonnet 4.6 supports more), reduce the registry, or run analysis on a subset.',
+        });
         return;
       }
       if (err instanceof ClaudeNotFoundError) {

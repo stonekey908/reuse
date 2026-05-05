@@ -143,6 +143,19 @@ describe('runAnalysis', () => {
   });
 });
 
+describe('runAnalysis with truncation', () => {
+  it('propagates OutputTruncatedError without retrying', async () => {
+    const { OutputTruncatedError } = await import('../../src/analysis/providers/types');
+    let calls = 0;
+    const runner: ClaudeRunner = async () => {
+      calls += 1;
+      throw new OutputTruncatedError('anthropic', 'claude-sonnet-4-6', 1000, '{"clusters":[');
+    };
+    await expect(runAnalysis({ registry, runner })).rejects.toBeInstanceOf(OutputTruncatedError);
+    expect(calls).toBe(1);
+  });
+});
+
 describe('JsonParseError', () => {
   it('exposes raw output on the error instance', () => {
     const err = new JsonParseError('raw stuff', new Error('boom'));
