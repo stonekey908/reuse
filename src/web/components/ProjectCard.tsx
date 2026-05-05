@@ -1,10 +1,26 @@
 import React, { useState } from 'react';
 
+type PatternValue = string | {
+  description: string;
+  capability?: string;
+  abstractionLevel?: string;
+  domain?: string;
+  fileEvidence?: string[];
+};
+
+function patternDescription(p: PatternValue): string {
+  return typeof p === 'string' ? p : p.description;
+}
+
+function patternIsTagged(p: PatternValue): boolean {
+  return typeof p !== 'string' && !!(p.capability && p.abstractionLevel && p.domain);
+}
+
 interface Project {
   path: string;
   description?: string;
   tags?: string[];
-  patterns?: Record<string, string>;
+  patterns?: Record<string, PatternValue>;
   git?: string;
   links?: Record<string, string>;
 }
@@ -153,7 +169,16 @@ export default function ProjectCard({ name, project, isEditing, onEdit, onUpdate
   const [description, setDescription] = useState(project.description || '');
   const [tags, setTags] = useState((project.tags || []).join(', '));
   const [git, setGit] = useState(project.git || '');
-  const [patterns, setPatterns] = useState<Record<string, string>>({ ...project.patterns });
+  // Editor surfaces only the description for editing. Structured tags
+  // (capability/abstractionLevel/domain) are managed by the Tagger agent,
+  // not the human editor.
+  const [patterns, setPatterns] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(project.patterns ?? {})) {
+      out[k] = patternDescription(v);
+    }
+    return out;
+  });
   const [links, setLinks] = useState<Record<string, string>>({ ...project.links });
 
   if (isEditing) {
@@ -266,9 +291,15 @@ export default function ProjectCard({ name, project, isEditing, onEdit, onUpdate
 
       {project.patterns && Object.keys(project.patterns).length > 0 && (
         <div style={{ marginTop: '0.5rem', borderTop: '1px solid #f0f0f0', paddingTop: '0.5rem' }}>
-          {Object.entries(project.patterns).map(([key, desc]) => (
+          {Object.entries(project.patterns).map(([key, value]) => (
             <div key={key} style={{ fontSize: '0.8rem', marginTop: '0.2rem' }}>
-              <strong style={{ color: '#333' }}>{key}:</strong> <span style={{ color: '#666' }}>{desc}</span>
+              <strong style={{ color: '#333' }}>{key}:</strong>{' '}
+              {patternIsTagged(value) && typeof value !== 'string' && (
+                <span style={{ fontSize: '0.65rem', background: '#eef', color: '#446', padding: '0.05rem 0.35rem', borderRadius: 3, marginRight: '0.25rem' }}>
+                  {value.domain} · {value.abstractionLevel}
+                </span>
+              )}
+              <span style={{ color: '#666' }}>{patternDescription(value)}</span>
             </div>
           ))}
         </div>

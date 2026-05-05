@@ -14,13 +14,18 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval:quality": "npm run build:server && node scripts/eval-quality.js",
-    "eval:extract": "npm run build:server && node scripts/eval-extract.js"
+    "eval:extract": "npm run build:server && node scripts/eval-extract.js",
+    "eval:cached": "npm run build:server && node scripts/eval-cached.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.93.0",
+    "@google/genai": "^1.52.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "commander": "^13.1.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "express": "^5.1.0",
+    "openai": "^6.36.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {

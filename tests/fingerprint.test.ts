@@ -9,8 +9,8 @@ const baseRegistry: Registry = {
       description: 'Foo app',
       tags: ['react'],
       patterns: {
-        'auth-flow': 'JWT auth with refresh tokens',
-        'upload-queue': 'Visible upload queue with retry',
+        'auth-flow': { description: 'JWT auth with refresh tokens', fileEvidence: [] },
+        'upload-queue': { description: 'Visible upload queue with retry', fileEvidence: [] },
       },
       links: {},
     },
@@ -19,7 +19,7 @@ const baseRegistry: Registry = {
       description: 'Bar app',
       tags: [],
       patterns: {
-        'state-machine': 'XState-driven UI flow',
+        'state-machine': { description: 'XState-driven UI flow', fileEvidence: [] },
       },
       links: {},
     },
@@ -53,8 +53,8 @@ describe('computeRegistryFingerprint', () => {
   it('is independent of pattern key insertion order', () => {
     const reordered = clone(baseRegistry);
     reordered.projects.foo.patterns = {
-      'upload-queue': 'Visible upload queue with retry',
-      'auth-flow': 'JWT auth with refresh tokens',
+      'upload-queue': { description: 'Visible upload queue with retry', fileEvidence: [] },
+      'auth-flow': { description: 'JWT auth with refresh tokens', fileEvidence: [] },
     };
     expect(computeRegistryFingerprint(reordered)).toBe(
       computeRegistryFingerprint(baseRegistry),
@@ -63,7 +63,7 @@ describe('computeRegistryFingerprint', () => {
 
   it('changes when a pattern is added', () => {
     const modified = clone(baseRegistry);
-    modified.projects.foo.patterns!['new-pattern'] = 'Something new';
+    modified.projects.foo.patterns!['new-pattern'] = { description: 'Something new', fileEvidence: [] };
     expect(computeRegistryFingerprint(modified)).not.toBe(
       computeRegistryFingerprint(baseRegistry),
     );
@@ -79,7 +79,7 @@ describe('computeRegistryFingerprint', () => {
 
   it("changes when a pattern's description is edited", () => {
     const modified = clone(baseRegistry);
-    modified.projects.foo.patterns!['auth-flow'] = 'OAuth2 with PKCE';
+    modified.projects.foo.patterns!['auth-flow'] = { description: 'OAuth2 with PKCE', fileEvidence: [] };
     expect(computeRegistryFingerprint(modified)).not.toBe(
       computeRegistryFingerprint(baseRegistry),
     );
@@ -91,7 +91,7 @@ describe('computeRegistryFingerprint', () => {
       path: '/tmp/baz',
       description: 'New',
       tags: [],
-      patterns: { foo: 'bar' },
+      patterns: { foo: { description: 'bar', fileEvidence: [] } },
       links: {},
     };
     expect(computeRegistryFingerprint(modified)).not.toBe(

@@ -6,11 +6,14 @@ const registry: Registry = {
   projects: {
     bravo: {
       path: '/tmp/bravo',
-      patterns: { 'foo': 'bravo foo', 'bar': 'bravo bar' },
+      patterns: {
+        foo: { description: 'bravo foo', fileEvidence: [] },
+        bar: { description: 'bravo bar', fileEvidence: [] },
+      },
     },
     alpha: {
       path: '/tmp/alpha',
-      patterns: { 'baz': 'alpha baz' },
+      patterns: { baz: { description: 'alpha baz', fileEvidence: [] } },
     },
   },
 };

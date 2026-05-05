@@ -18,14 +18,20 @@ export type StalenessResult = {
   changedProjects?: ChangedProjects;
 };
 
-export function writeAnalysis(registry: Registry, clusters: AnalysisItem[]): Registry {
+export type WriteMode = 'reset' | 'append';
+
+export function writeAnalysis(registry: Registry, clusters: AnalysisItem[], mode: WriteMode = 'reset'): Registry {
+  const merged = mode === 'append' && registry.analysis
+    ? [...registry.analysis.clusters, ...clusters]
+    : clusters;
+
   const updated: Registry = {
     ...registry,
     analysis: {
       generatedAt: new Date().toISOString(),
       registryFingerprint: computeRegistryFingerprint(registry),
       projectFingerprints: computeProjectFingerprints(registry),
-      clusters,
+      clusters: merged,
     },
   };
   saveRegistry(updated);

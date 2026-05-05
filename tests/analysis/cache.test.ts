@@ -18,8 +18,8 @@ const sampleClusters: Cluster[] = [
 
 const baseRegistry: Registry = {
   projects: {
-    foo: { path: '/tmp/foo', patterns: { upload: 'queue with retry' } },
-    bar: { path: '/tmp/bar', patterns: { state: 'XState flow' } },
+    foo: { path: '/tmp/foo', patterns: { upload: { description: 'queue with retry', fileEvidence: [] } } },
+    bar: { path: '/tmp/bar', patterns: { state: { description: 'XState flow', fileEvidence: [] } } },
   },
 };
 
@@ -84,7 +84,7 @@ describe('getStaleness', () => {
       ...cached,
       projects: {
         ...cached.projects,
-        baz: { path: '/tmp/baz', patterns: { 'new-thing': 'something' } },
+        baz: { path: '/tmp/baz', patterns: { 'new-thing': { description: 'something', fileEvidence: [] } } },
       },
     };
     const result = getStaleness(modified);
@@ -106,7 +106,7 @@ describe('getStaleness', () => {
       ...cached,
       projects: {
         ...cached.projects,
-        foo: { ...cached.projects.foo, patterns: { upload: 'completely different' } },
+        foo: { ...cached.projects.foo, patterns: { upload: { description: 'completely different', fileEvidence: [] } } },
       },
     };
     const result = getStaleness(modified);
@@ -118,8 +118,8 @@ describe('getStaleness', () => {
     const modified: Registry = {
       ...cached,
       projects: {
-        foo: { ...cached.projects.foo, patterns: { upload: 'edited' } },
-        baz: { path: '/tmp/baz', patterns: { 'k': 'v' } },
+        foo: { ...cached.projects.foo, patterns: { upload: { description: 'edited', fileEvidence: [] } } },
+        baz: { path: '/tmp/baz', patterns: { k: { description: 'v', fileEvidence: [] } } },
       },
     };
     const result = getStaleness(modified);

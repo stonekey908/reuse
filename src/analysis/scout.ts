@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { Project, Registry } from '../shared/types.js';
+import type { Pattern, Project, Registry } from '../shared/types.js';
 
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', '.next', '.vite', '.turbo',
@@ -122,7 +122,7 @@ export interface ScoutReport {
     path: string;
     description?: string;
     tags?: string[];
-    existingPatterns: Record<string, string>;
+    existingPatterns: Record<string, Pattern>;
   };
   readme: { filename: string; excerpt: string } | { note: string };
   packageJson: Record<string, unknown> | { note: string };

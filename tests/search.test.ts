@@ -9,8 +9,8 @@ const testRegistry: Registry = {
       description: 'School communication app for parents and teachers',
       tags: ['react-native', 'expo', 'firebase', 'encryption'],
       patterns: {
-        'e2e-encryption': 'End-to-end encryption using libsodium',
-        'file-upload': 'Chunked upload with progress and retry',
+        'e2e-encryption': { description: 'End-to-end encryption using libsodium', fileEvidence: [] },
+        'file-upload': { description: 'Chunked upload with progress and retry', fileEvidence: [] },
       },
       links: {},
     },
@@ -19,7 +19,7 @@ const testRegistry: Registry = {
       description: 'AI wine label scanner and cellar management',
       tags: ['react-native', 'expo', 'supabase', 'ai', 'camera'],
       patterns: {
-        'camera-scan': 'Real-time label scanning with ML Kit',
+        'camera-scan': { description: 'Real-time label scanning with ML Kit', fileEvidence: [] },
       },
       links: {},
     },
@@ -28,7 +28,7 @@ const testRegistry: Registry = {
       description: 'Trading platform with real-time data',
       tags: ['nextjs', 'supabase', 'websockets'],
       patterns: {
-        'real-time': 'WebSocket-based live data feeds',
+        'real-time': { description: 'WebSocket-based live data feeds', fileEvidence: [] },
       },
       links: {},
     },
