@@ -17,6 +17,14 @@ export interface ProviderInfo {
 
 export interface CompleteOptions {
   model?: string;
+  signal?: AbortSignal;
+}
+
+export class CancelledError extends Error {
+  constructor() {
+    super('Run cancelled by user.');
+    this.name = 'CancelledError';
+  }
 }
 
 export interface Provider {

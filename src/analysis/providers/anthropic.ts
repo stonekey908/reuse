@@ -36,11 +36,14 @@ export function buildAnthropicProvider(): Provider {
     }
 
     const client = new Anthropic({ apiKey });
-    const response = await client.messages.create({
-      model: modelId,
-      max_tokens: 16_000,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    const response = await client.messages.create(
+      {
+        model: modelId,
+        max_tokens: 16_000,
+        messages: [{ role: 'user', content: prompt }],
+      },
+      { signal: opts.signal },
+    );
 
     const textBlock = response.content.find((b) => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') {
