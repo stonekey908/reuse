@@ -6,6 +6,9 @@ import {
 } from '../shared/types.js';
 import { buildPrompt, collectPatterns } from './prompt.js';
 import { getProvider, type ProviderId } from './providers/index.js';
+import { OutputTruncatedError } from './providers/types.js';
+
+export { OutputTruncatedError } from './providers/types.js';
 
 export class ClaudeNotFoundError extends Error {
   constructor() {
@@ -74,14 +77,30 @@ export async function runAnalysis({
   const patterns = collectPatterns(registry);
 
   const firstPrompt = buildPrompt({ priorClusters, patterns });
-  const firstOutput = await runner(firstPrompt);
+
+  // OutputTruncatedError must propagate as-is — retrying with the same budget
+  // just truncates again, so we surface the actionable error instead of
+  // looping into a misleading JsonParseError.
+  let firstOutput: string;
+  try {
+    firstOutput = await runner(firstPrompt);
+  } catch (err) {
+    if (err instanceof OutputTruncatedError) throw err;
+    throw err;
+  }
 
   let items: AnalysisItem[];
   try {
     items = parseClusters(firstOutput);
   } catch {
     const retryPrompt = buildPrompt({ priorClusters, patterns, strict: true });
-    const retryOutput = await runner(retryPrompt);
+    let retryOutput: string;
+    try {
+      retryOutput = await runner(retryPrompt);
+    } catch (err) {
+      if (err instanceof OutputTruncatedError) throw err;
+      throw err;
+    }
     try {
       items = parseClusters(retryOutput);
     } catch (err) {

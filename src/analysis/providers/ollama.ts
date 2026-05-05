@@ -1,4 +1,5 @@
 import {
+  OutputTruncatedError,
   ProviderNotConfiguredError,
   type CompleteOptions,
   type Provider,
@@ -21,6 +22,10 @@ const ENV_KEY = 'OLLAMA_BASE_URL';
 const DEFAULT_BASE_URL = 'http://localhost:11434';
 // Override Ollama's 4096 default which would truncate our ~7k-token prompt.
 const DEFAULT_NUM_CTX = 32_768;
+// Cap on output tokens. -1 = "until EOS" (the model decides). Gemma / Qwen
+// will happily run forever; -1 is fine because runAnalysis re-validates the
+// final JSON. The previous (implicit) 128 default truncated mid-string.
+const DEFAULT_NUM_PREDICT = -1;
 
 async function probeOllama(baseUrl: string): Promise<{ available: boolean; installed: string[] }> {
   try {
@@ -71,7 +76,7 @@ export async function buildOllamaProvider(): Promise<Provider> {
         model: modelId,
         prompt,
         stream: false,
-        options: { num_ctx: DEFAULT_NUM_CTX },
+        options: { num_ctx: DEFAULT_NUM_CTX, num_predict: DEFAULT_NUM_PREDICT },
       }),
       signal: opts.signal,
     });
@@ -79,9 +84,12 @@ export async function buildOllamaProvider(): Promise<Provider> {
       const errText = await res.text().catch(() => '');
       throw new Error(`Ollama API error ${res.status}: ${errText.slice(0, 300)}`);
     }
-    const json = (await res.json()) as { response?: string; error?: string };
+    const json = (await res.json()) as { response?: string; error?: string; done_reason?: string };
     if (json.error) throw new Error(`Ollama error: ${json.error}`);
     if (!json.response) throw new Error(`Ollama returned no response field.`);
+    if (json.done_reason === 'length') {
+      throw new OutputTruncatedError('ollama', modelId, json.response.length, json.response);
+    }
     return json.response;
   };
 

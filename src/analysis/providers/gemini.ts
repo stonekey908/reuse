@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import {
   ContextWindowExceededError,
+  OutputTruncatedError,
   ProviderNotConfiguredError,
   type CompleteOptions,
   type Provider,
@@ -41,11 +42,20 @@ export function buildGeminiProvider(): Provider {
     const response = await client.models.generateContent({
       model: modelId,
       contents: prompt,
-      config: { abortSignal: opts.signal },
+      config: {
+        abortSignal: opts.signal,
+        // Headroom for ~100-pattern clusters. Gemini's default cap is much
+        // smaller and would truncate the JSON mid-string.
+        maxOutputTokens: 32_000,
+      },
     });
 
     const text = response.text;
     if (!text) throw new Error(`Gemini returned no text content.`);
+    const finishReason = response.candidates?.[0]?.finishReason as string | undefined;
+    if (finishReason === 'MAX_TOKENS') {
+      throw new OutputTruncatedError('gemini', modelId, text.length, text);
+    }
     return text;
   };
 

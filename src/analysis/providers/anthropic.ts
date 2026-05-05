@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import {
   ContextWindowExceededError,
+  OutputTruncatedError,
   ProviderNotConfiguredError,
   type CompleteOptions,
   type Provider,
@@ -39,7 +40,9 @@ export function buildAnthropicProvider(): Provider {
     const response = await client.messages.create(
       {
         model: modelId,
-        max_tokens: 16_000,
+        // Bumped from 16k → 32k after a 91-pattern registry truncated mid-string.
+        // 32k is safe across all current Anthropic models (Opus / Sonnet / Haiku 4.x).
+        max_tokens: 32_000,
         messages: [{ role: 'user', content: prompt }],
       },
       { signal: opts.signal },
@@ -48,6 +51,9 @@ export function buildAnthropicProvider(): Provider {
     const textBlock = response.content.find((b) => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') {
       throw new Error(`Anthropic returned no text content. Stop reason: ${response.stop_reason}`);
+    }
+    if (response.stop_reason === 'max_tokens') {
+      throw new OutputTruncatedError('anthropic', modelId, textBlock.text.length, textBlock.text);
     }
     return textBlock.text;
   };

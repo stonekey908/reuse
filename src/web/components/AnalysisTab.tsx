@@ -240,6 +240,10 @@ export default function AnalysisTab({ onJumpToProject }: Props) {
         }
         if (json.code === 'CLAUDE_NOT_FOUND' && json.hint) setError(`${json.error}\n\n${json.hint}`);
         if (json.code === 'JSON_PARSE_FAILED' && json.rawOutput) setRawOutput(json.rawOutput);
+        if (json.code === 'OUTPUT_TRUNCATED') {
+          if (json.partial) setRawOutput(json.partial);
+          if (json.hint) setError(`${json.error}\n\n${json.hint}`);
+        }
         return;
       }
       setData(json);

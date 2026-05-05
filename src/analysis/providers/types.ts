@@ -48,3 +48,28 @@ export class ContextWindowExceededError extends Error {
     this.name = 'ContextWindowExceededError';
   }
 }
+
+/**
+ * Thrown when a provider stops generating because it hit the output-token cap
+ * (Anthropic stop_reason: "max_tokens", OpenAI finish_reason: "length",
+ * Gemini finishReason: "MAX_TOKENS", Ollama done_reason: "length").
+ *
+ * The runner needs to distinguish this from a JSON-parse failure caused by
+ * malformed output — retrying a truncated response with the same budget will
+ * just truncate again, so we surface a specific actionable error to the UI
+ * instead of looping the runner.
+ */
+export class OutputTruncatedError extends Error {
+  constructor(
+    public readonly provider: ProviderId,
+    public readonly model: string,
+    public readonly outputChars: number,
+    public readonly partial: string,
+  ) {
+    super(
+      `${provider}/${model} stopped generating because it hit the output-token cap (${Math.round(outputChars / 4)} tokens emitted). ` +
+      `The registry has grown beyond what fits in one response. Try a model with a larger output budget, or split the analysis.`,
+    );
+    this.name = 'OutputTruncatedError';
+  }
+}
