@@ -154,9 +154,13 @@ function ThemedAnalysisList({
     return Array.from(map.entries()).filter(([, arr]) => arr.length > 0);
   }, [items]);
 
-  // Collapse only "misc" by default; everything else expanded so the user
-  // sees the structure on first render.
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => ({ misc: true }));
+  // All themes expanded on first render so the user sees the two-level
+  // structure immediately. They can collapse a theme by clicking its
+  // header. The previous default (collapse "misc" only) hid the entire
+  // analysis when an old cached run had no theme field on any item — every
+  // item bucketed into "misc" → user saw one collapsed section that read
+  // as "still flat".
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   if (buckets.length === 0) return null;
 
