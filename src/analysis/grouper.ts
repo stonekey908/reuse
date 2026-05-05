@@ -1,5 +1,6 @@
 import { canonicalCapability, canonicalDomain, type Glossary } from '../shared/glossary.js';
 import type {
+  AbstractionLevel,
   AnalysisItem,
   ClusterMember,
   Pattern,
@@ -15,13 +16,9 @@ import type {
  * 1. Patterns with no capability tag are emitted as standalones with a
  *    "needs-tagging" rationale, so they're visible but flagged.
  * 2. Patterns are normalised through the glossary (alias resolution).
- * 3. Patterns are grouped by canonicalCapability ALONE. abstractionLevel is
- *    surfaced as metadata on each member, not as a grouping axis — splitting
- *    primitive-vs-feature for the same capability creates orphan standalones
- *    sharing a slug, which is more confusing than informative.
- * 4. A group becomes a cluster IF it has ≥2 members. Single-project clusters
- *    are valid signals (internal duplication is a real finding); they're
- *    surfaced but the prose can flag them. Singletons remain standalones.
+ * 3. Patterns are grouped by (canonicalCapability, abstractionLevel) tuple.
+ * 4. A group becomes a cluster ONLY IF it has ≥2 members AND those members
+ *    span ≥2 distinct projects. Otherwise each member becomes a standalone.
  */
 
 export interface PatternEntry {
@@ -44,6 +41,10 @@ function memberFromEntry(e: PatternEntry): ClusterMember {
   };
 }
 
+function distinctProjects(entries: PatternEntry[]): Set<string> {
+  return new Set(entries.map((e) => e.project));
+}
+
 export function collectTaggedPatterns(registry: Registry): PatternEntry[] {
   const out: PatternEntry[] = [];
   for (const project of Object.keys(registry.projects).sort()) {
@@ -55,10 +56,15 @@ export function collectTaggedPatterns(registry: Registry): PatternEntry[] {
   return out;
 }
 
+/** Builds a (capability, abstractionLevel) key for grouping. */
+function groupKey(capability: string, level: AbstractionLevel): string {
+  return `${capability}::${level}`;
+}
+
 export function group(registry: Registry, glossary: Glossary): GrouperResult {
   const all = collectTaggedPatterns(registry);
   const untagged: PatternEntry[] = [];
-  const buckets = new Map<string, { capability: string; entries: PatternEntry[] }>();
+  const buckets = new Map<string, { capability: string; level: AbstractionLevel; entries: PatternEntry[] }>();
 
   for (const entry of all) {
     const { capability, abstractionLevel, domain } = entry.pattern;
@@ -68,10 +74,11 @@ export function group(registry: Registry, glossary: Glossary): GrouperResult {
     }
     const canonCap = canonicalCapability(glossary, capability);
     const canonDomain = canonicalDomain(glossary, domain);
-    let bucket = buckets.get(canonCap);
+    const key = groupKey(canonCap, abstractionLevel);
+    let bucket = buckets.get(key);
     if (!bucket) {
-      bucket = { capability: canonCap, entries: [] };
-      buckets.set(canonCap, bucket);
+      bucket = { capability: canonCap, level: abstractionLevel, entries: [] };
+      buckets.set(key, bucket);
     }
     bucket.entries.push({
       ...entry,
@@ -82,15 +89,15 @@ export function group(registry: Registry, glossary: Glossary): GrouperResult {
   const items: AnalysisItem[] = [];
 
   for (const bucket of buckets.values()) {
-    const { capability, entries } = bucket;
+    const { capability, level, entries } = bucket;
+    const projects = distinctProjects(entries);
 
-    // ≥2 members → cluster, regardless of project span. The Writer prose calls
-    // out single-project clusters as internal-duplication findings.
-    if (entries.length >= 2) {
+    // Multi-member, ≥2 projects → cluster (Writer fills in prose later).
+    if (entries.length >= 2 && projects.size >= 2) {
       items.push({
         kind: 'cluster',
         capability,
-        description: capability, // placeholder; Writer overwrites
+        description: `${capability} (${level})`, // placeholder; Writer overwrites
         members: entries.map(memberFromEntry),
         similarities: '',
         differences: '',
@@ -98,16 +105,17 @@ export function group(registry: Registry, glossary: Glossary): GrouperResult {
       continue;
     }
 
-    // Singleton → standalone.
-    const e = entries[0];
-    items.push({
-      kind: 'standalone',
-      capability,
-      description: capability, // placeholder; Writer overwrites
-      member: memberFromEntry(e),
-      rationale: '',
-      closestRelative: '',
-    });
+    // Otherwise — single member or single project — emit standalones (one per entry).
+    for (const e of entries) {
+      items.push({
+        kind: 'standalone',
+        capability,
+        description: `${capability} (${level})`, // placeholder; Writer overwrites
+        member: memberFromEntry(e),
+        rationale: '',
+        closestRelative: '',
+      });
+    }
   }
 
   // Untagged patterns — surface them as standalones with a clear flag so they're not invisible.
