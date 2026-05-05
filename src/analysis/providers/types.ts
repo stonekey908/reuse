@@ -3,7 +3,12 @@ export type ProviderId = 'anthropic' | 'openai' | 'gemini' | 'ollama';
 export interface ProviderModel {
   id: string;
   label: string;
+  /** Input-side context window (prompt + history). */
   contextWindow: number;
+  /** Output-side cap — max tokens the model will emit in one response.
+   *  Distinct from contextWindow: a 1M-context model can still cap output
+   *  at ~32-64k. Used to set max_tokens / max_completion_tokens / maxOutputTokens. */
+  maxOutputTokens: number;
   notes?: string;
 }
 

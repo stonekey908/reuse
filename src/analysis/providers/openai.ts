@@ -10,10 +10,10 @@ import {
 } from './types.js';
 
 const MODELS: ProviderModel[] = [
-  { id: 'gpt-5.5', label: 'GPT-5.5', contextWindow: 1_000_000, notes: '1M context. Most capable in the GPT-5 series.' },
-  { id: 'gpt-5.4', label: 'GPT-5.4', contextWindow: 400_000, notes: 'Strong default; slightly cheaper than 5.5.' },
-  { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', contextWindow: 400_000, notes: 'Fast and cheap.' },
-  { id: 'gpt-5.4-nano', label: 'GPT-5.4 nano', contextWindow: 400_000, notes: 'Lowest latency / cost.' },
+  { id: 'gpt-5.5', label: 'GPT-5.5', contextWindow: 1_000_000, maxOutputTokens: 128_000, notes: '1M context. Most capable in the GPT-5 series.' },
+  { id: 'gpt-5.4', label: 'GPT-5.4', contextWindow: 400_000, maxOutputTokens: 128_000, notes: 'Strong default; slightly cheaper than 5.5.' },
+  { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', contextWindow: 400_000, maxOutputTokens: 128_000, notes: 'Fast and cheap.' },
+  { id: 'gpt-5.4-nano', label: 'GPT-5.4 nano', contextWindow: 400_000, maxOutputTokens: 128_000, notes: 'Lowest latency / cost.' },
 ];
 
 const DEFAULT_MODEL = 'gpt-5.4';
@@ -38,12 +38,11 @@ export function buildOpenAIProvider(): Provider {
     }
 
     const client = new OpenAI({ apiKey });
+    const maxOutputTokens = model?.maxOutputTokens ?? 32_000;
     const response = await client.chat.completions.create(
       {
         model: modelId,
-        // Headroom for ~100-pattern clusters; OpenAI silently caps at the
-        // model's max output budget if this is too high.
-        max_completion_tokens: 32_000,
+        max_completion_tokens: maxOutputTokens,
         messages: [{ role: 'user', content: prompt }],
       },
       { signal: opts.signal },
