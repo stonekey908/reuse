@@ -10,11 +10,11 @@ import {
 } from './types.js';
 
 const MODELS: ProviderModel[] = [
-  { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (preview)', contextWindow: 1_000_000, notes: 'Reasoning-first; latest preview.' },
-  { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)', contextWindow: 1_000_000, notes: 'Fast preview model from the Gemini 3 line.' },
-  { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash-Lite (preview)', contextWindow: 1_000_000, notes: 'Cost-efficient.' },
-  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', contextWindow: 2_000_000, notes: 'Stable; very large context.' },
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', contextWindow: 1_000_000, notes: 'Fast and capable.' },
+  { id: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro (preview)', contextWindow: 1_000_000, maxOutputTokens: 65_536, notes: 'Reasoning-first; latest preview.' },
+  { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)', contextWindow: 1_000_000, maxOutputTokens: 65_536, notes: 'Fast preview model from the Gemini 3 line.' },
+  { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash-Lite (preview)', contextWindow: 1_000_000, maxOutputTokens: 65_536, notes: 'Cost-efficient.' },
+  { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', contextWindow: 2_000_000, maxOutputTokens: 65_536, notes: 'Stable; very large context.' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', contextWindow: 1_000_000, maxOutputTokens: 65_536, notes: 'Fast and capable.' },
 ];
 
 const DEFAULT_MODEL = 'gemini-2.5-pro';
@@ -39,15 +39,11 @@ export function buildGeminiProvider(): Provider {
     }
 
     const client = new GoogleGenAI({ apiKey });
+    const maxOutputTokens = model?.maxOutputTokens ?? 32_000;
     const response = await client.models.generateContent({
       model: modelId,
       contents: prompt,
-      config: {
-        abortSignal: opts.signal,
-        // Headroom for ~100-pattern clusters. Gemini's default cap is much
-        // smaller and would truncate the JSON mid-string.
-        maxOutputTokens: 32_000,
-      },
+      config: { abortSignal: opts.signal, maxOutputTokens },
     });
 
     const text = response.text;

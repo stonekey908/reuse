@@ -46,6 +46,15 @@ ${priorClusters.map((c) => `  - "${c.capability}" (${c.kind === 'standalone' ? '
 ${priorSection}Current patterns (${patterns.length} patterns across ${projectCount} projects):
 ${patternsList}
 
+OUTPUT BUDGET (read first):
+- Every field must be DENSE and information-rich. Pretend each character costs you something — because at registry scale (60+ patterns) the JSON will overflow the model's response budget if you pad with filler.
+- \`description\` ≤ 120 chars (one tight line — the cluster headline).
+- Each member \`summary\` ≤ 100 chars. Just the distinctive mechanism, not a thesis.
+- \`similarities\` and \`differences\` ≤ 2 sentences AND ≤ 280 chars total each. State the shared mechanism / divergent axes plainly. No throat-clearing ("These patterns share..."), no restating member names.
+- \`rationale\` and \`closestRelative\` on standalones: 1 sentence, ≤ 200 chars each.
+- \`consolidationNote\` (optional): ≤ 200 chars, ending with the effort/payoff parenthetical.
+- DO NOT enumerate every micro-difference between members. Pick the ONE axis that matters and say it.
+
 Rules:
 - Each pattern joins exactly one item — either a multi-member cluster or a standalone pattern.
 - Reuse a previous item's name when the meaning still applies. Drop items whose patterns are gone.
@@ -62,9 +71,9 @@ Rules:
 - **Strategy diversity is a STRENGTH of a cluster, not a reason to split.** When members address the same problem via different strategies (multi-provider routing vs CLI shell-out vs single-provider direct call), they belong in the SAME cluster. Spell out the divergent strategies in the differences field. Splitting strategies into separate clusters destroys the comparison.
 - **Don't force unrelated patterns together.** A cluster must reflect a genuine shared capability, not a vague umbrella. If consolidating two patterns requires writing "skip — divergence is fundamental" in the consolidationNote, they belong as standalone items, not in one cluster. Likewise, if the consolidationNote admits that one or more members would NOT benefit from the proposed shared abstraction, the cluster is too broad — pull those members out as standalone items.
 - **Capability names must be framework-agnostic.** Never put framework, library, or vendor names in the capability header — "shadcn-style", "expo-haptics", "tus", "AES-GCM", "claude -p" all belong in member summaries or descriptions, not in the capability name itself. Use the abstract problem name: "Component distribution via source-copy", "Haptic feedback", "Resumable file upload", "At-rest encryption".
-- For multi-member clusters: \`similarities\` and \`differences\` must be substantive prose — at least two sentences each — citing concrete shared mechanisms or concrete divergences. Never write "they are similar" or "Single member." placeholders.
-- For standalone items: \`rationale\` is one sentence on what makes this pattern its own category. \`closestRelative\` is one sentence naming the nearest registered pattern (by project + key) and why it doesn't share enough to cluster. NEVER use the rationale or closestRelative fields to say "single member" — they exist precisely to replace those placeholders.
-- \`consolidationNote\` is optional and ONLY applies to clusters. Include it when there is a concrete reuse suggestion. End every consolidationNote with a parenthetical effort/payoff judgment: "(low effort, high reuse)", "(medium effort, medium reuse)", or "(skip — divergence is fundamental)". When relevant, name the proposed API surface (e.g. an "upload(stream, opts) → progress events" function shape).
+- For multi-member clusters: \`similarities\` and \`differences\` must cite concrete shared mechanisms / concrete divergences within the OUTPUT BUDGET above. One dense sentence beats two padded ones. Never write "they are similar" or "Single member." placeholders.
+- For standalone items: \`rationale\` is one tight sentence on what makes this pattern its own category. \`closestRelative\` names the nearest registered pattern (by project + key) and why it doesn't share enough to cluster. NEVER use these fields to say "single member" — they exist precisely to replace those placeholders.
+- \`consolidationNote\` is optional and ONLY applies to clusters. Include it when there is a concrete reuse suggestion. End every consolidationNote with a parenthetical effort/payoff judgment: "(low effort, high reuse)", "(medium effort, medium reuse)", or "(skip — divergence is fundamental)". Name the proposed API surface in 1 short clause when relevant.
 
 Return strict JSON matching exactly this shape (the array can mix both kinds):
 {
@@ -76,8 +85,8 @@ Return strict JSON matching exactly this shape (the array can mix both kinds):
       "members": [
         { "project": "project name", "patternKey": "pattern key", "summary": "1-line summary of how this member implements the capability" }
       ],
-      "similarities": "string — what cluster members share, in natural language (≥2 sentences)",
-      "differences": "string — how cluster members diverge, in natural language (≥2 sentences)",
+      "similarities": "string — what cluster members share (≤280 chars, ≤2 sentences)",
+      "differences": "string — how cluster members diverge (≤280 chars, ≤2 sentences)",
       "consolidationNote": "string (optional) — concrete reuse / consolidation suggestion ending with effort/payoff judgment"
     },
     {

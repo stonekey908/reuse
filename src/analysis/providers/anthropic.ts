@@ -10,9 +10,9 @@ import {
 } from './types.js';
 
 const MODELS: ProviderModel[] = [
-  { id: 'claude-opus-4-7', label: 'Claude Opus 4.7', contextWindow: 200_000, notes: 'Most capable. Slowest. Best for prompt-tuning rounds.' },
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (1M ctx)', contextWindow: 1_000_000, notes: 'Recommended default. 30-50% faster than Sonnet 4.5, 1M context.' },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', contextWindow: 200_000, notes: 'Fastest. Cheaper. Quality may be coarser on rich prose.' },
+  { id: 'claude-opus-4-7', label: 'Claude Opus 4.7', contextWindow: 200_000, maxOutputTokens: 32_000, notes: 'Most capable. Slowest. Best for prompt-tuning rounds.' },
+  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (1M ctx)', contextWindow: 1_000_000, maxOutputTokens: 64_000, notes: 'Recommended default. 1M context, 64k output.' },
+  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', contextWindow: 200_000, maxOutputTokens: 64_000, notes: 'Fastest. Cheaper. Quality may be coarser on rich prose.' },
 ];
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -37,12 +37,14 @@ export function buildAnthropicProvider(): Provider {
     }
 
     const client = new Anthropic({ apiKey });
+    const maxOutputTokens = model?.maxOutputTokens ?? 32_000;
     const response = await client.messages.create(
       {
         model: modelId,
-        // Bumped from 16k → 32k after a 91-pattern registry truncated mid-string.
-        // 32k is safe across all current Anthropic models (Opus / Sonnet / Haiku 4.x).
-        max_tokens: 32_000,
+        // Each model carries its own output-token cap (Opus 32k, Sonnet/Haiku
+        // 64k). Distinct from contextWindow — the 1M Sonnet still caps OUTPUT
+        // at 64k, which is what truncated the analysis JSON pre-fix.
+        max_tokens: maxOutputTokens,
         messages: [{ role: 'user', content: prompt }],
       },
       { signal: opts.signal },

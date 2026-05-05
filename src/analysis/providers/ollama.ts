@@ -8,14 +8,15 @@ import {
 } from './types.js';
 
 // Static fallback list — we'll merge with whatever Ollama actually has installed.
-// Context windows reflect each model's maximum capacity.
+// Local models honour num_predict at request time so maxOutputTokens here is a
+// soft hint (we pass -1 = "until EOS" to Ollama).
 const KNOWN_MODELS: ProviderModel[] = [
-  { id: 'qwen2.5-coder:14b', label: 'Qwen2.5 Coder 14B', contextWindow: 128_000, notes: 'Code-focused; good at structured output.' },
-  { id: 'qwen2.5-coder:7b', label: 'Qwen2.5 Coder 7B', contextWindow: 128_000, notes: 'Smaller / faster.' },
-  { id: 'qwen3-coder:30b', label: 'Qwen3 Coder 30B', contextWindow: 256_000 },
-  { id: 'gemma3:9b', label: 'Gemma3 9B', contextWindow: 65_536 },
-  { id: 'gemma3:4b', label: 'Gemma3 4B', contextWindow: 65_536 },
-  { id: 'llama3.3:70b', label: 'Llama 3.3 70B', contextWindow: 128_000, notes: 'Heavyweight; needs serious hardware.' },
+  { id: 'qwen2.5-coder:14b', label: 'Qwen2.5 Coder 14B', contextWindow: 128_000, maxOutputTokens: 32_000, notes: 'Code-focused; good at structured output.' },
+  { id: 'qwen2.5-coder:7b', label: 'Qwen2.5 Coder 7B', contextWindow: 128_000, maxOutputTokens: 32_000, notes: 'Smaller / faster.' },
+  { id: 'qwen3-coder:30b', label: 'Qwen3 Coder 30B', contextWindow: 256_000, maxOutputTokens: 32_000 },
+  { id: 'gemma3:9b', label: 'Gemma3 9B', contextWindow: 65_536, maxOutputTokens: 16_000 },
+  { id: 'gemma3:4b', label: 'Gemma3 4B', contextWindow: 65_536, maxOutputTokens: 16_000 },
+  { id: 'llama3.3:70b', label: 'Llama 3.3 70B', contextWindow: 128_000, maxOutputTokens: 32_000, notes: 'Heavyweight; needs serious hardware.' },
 ];
 
 const ENV_KEY = 'OLLAMA_BASE_URL';
@@ -50,7 +51,7 @@ export async function buildOllamaProvider(): Promise<Provider> {
   const installedMap = new Map<string, ProviderModel>();
   for (const id of probe.installed) {
     const known = KNOWN_MODELS.find((m) => m.id === id);
-    installedMap.set(id, known ?? { id, label: id, contextWindow: 32_768, notes: 'Installed locally.' });
+    installedMap.set(id, known ?? { id, label: id, contextWindow: 32_768, maxOutputTokens: 16_000, notes: 'Installed locally.' });
   }
   for (const m of KNOWN_MODELS) {
     if (!installedMap.has(m.id)) installedMap.set(m.id, m);
