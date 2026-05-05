@@ -38,23 +38,28 @@ export function buildAnthropicProvider(): Provider {
 
     const client = new Anthropic({ apiKey });
     const maxOutputTokens = model?.maxOutputTokens ?? 32_000;
-    const response = await client.messages.create(
+
+    // The Anthropic SDK requires streaming for any request whose budget
+    // (model + max_tokens) could plausibly exceed the 10-minute non-stream
+    // ceiling. At 64k output on Sonnet that always trips the guard, so we
+    // stream unconditionally and accumulate the text deltas. Same final
+    // result as messages.create, just streamed.
+    const stream = client.messages.stream(
       {
         model: modelId,
-        // Each model carries its own output-token cap (Opus 32k, Sonnet/Haiku
-        // 64k). Distinct from contextWindow — the 1M Sonnet still caps OUTPUT
-        // at 64k, which is what truncated the analysis JSON pre-fix.
         max_tokens: maxOutputTokens,
         messages: [{ role: 'user', content: prompt }],
       },
       { signal: opts.signal },
     );
 
-    const textBlock = response.content.find((b) => b.type === 'text');
+    const final = await stream.finalMessage();
+
+    const textBlock = final.content.find((b) => b.type === 'text');
     if (!textBlock || textBlock.type !== 'text') {
-      throw new Error(`Anthropic returned no text content. Stop reason: ${response.stop_reason}`);
+      throw new Error(`Anthropic returned no text content. Stop reason: ${final.stop_reason}`);
     }
-    if (response.stop_reason === 'max_tokens') {
+    if (final.stop_reason === 'max_tokens') {
       throw new OutputTruncatedError('anthropic', modelId, textBlock.text.length, textBlock.text);
     }
     return textBlock.text;
